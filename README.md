@@ -1,217 +1,101 @@
 # Macro Regime AI Dashboard
 
-A Next.js 15 App Router research dashboard that scores macro signals across inflation, growth
-stress, liquidity, crypto demand, and Indonesia FX risk. The current deployment is a static demo;
-it does not connect to live market feeds.
+A read-only Next.js 15 dashboard for daily public macro observations across inflation, growth
+stress, liquidity, Bitcoin blockspace demand, and Indonesia FX risk. The app uses deterministic
+rules; the report endpoint is not connected to an AI model. There is no trading or brokerage
+integration.
 
-This project is an educational research dashboard only. It is not financial advice, investment
-advice, trading advice, or a recommendation to buy, sell, hold, or short any asset.
+**Educational research tool, not financial advice.** Scores and regimes are provisional heuristics,
+not calibrated forecasts or backtests. Public observations may be delayed, revised, or unavailable.
 
-## Included
+## Data Sources
 
-- Local mock time-series data for CPI, Core CPI, Oil, DXY, yields, spreads, claims, BTC,
-  stablecoins, USDIDR, and gold.
-- Deterministic category scoring in `lib/scoring.ts`, with weights, scaling ranges, and score direction exposed to the UI.
-- Six-state regime classification, with heuristic confidence explicitly labeled as uncalibrated.
-- Asset playbook mapping in `lib/playbook.ts`.
-- Rules-generated sample brief endpoint at `GET /api/ai-report`.
-- Responsive monitoring workspace with Overview, Signals & Data, and Methodology views.
-- Sample cadence labels and explicit sample observation date.
+| Dashboard series | Public source and treatment |
+| --- | --- |
+| CPI and Core CPI | BLS unadjusted CPI indices converted to same-month year-over-year changes |
+| Brent crude | EIA daily spot series; requires server-only `EIA_API_KEY` |
+| 2Y and 10Y real yields | U.S. Treasury daily XML feeds |
+| Initial claims | DOL national seasonally adjusted weekly claims report |
+| Broad Dollar Index | Federal Reserve H.10 `DTWEXBGS`, delivered through FRED; index base Jan 2006=100, not ICE DXY |
+| Crypto demand | Mempool.space backlog virtual size and projected block median fee; Bitcoin blockspace proxy, not price, buying pressure, or investor flows |
+| USD/IDR | Frankfurter ECB reference cross: EUR/IDR divided by EUR/USD; not BI JISDOR or tradable spot FX |
 
-## Project Links
+BTC spot, high-yield spreads, gold, and stablecoin market capitalization are excluded until a public
+provider's display and redistribution rights are confirmed. Excluded and unavailable observations
+are `null`, never zero or mock fallbacks. Per-feed history charts are shown only when the provider
+returns at least two dated observations.
 
-- Live Netlify deployment: `https://macro-regime-ai-dashboard.netlify.app`
-- GitHub repository: `https://github.com/bryannatha/macro-regime-ai-dashboard`
+Observation statuses are `available`, `unavailable`, and `excluded`. Available observations include
+source, source URL where provided, observation date, retrieval timestamp, cadence, units, and notes.
+The UI marks observations stale after 3 days for daily feeds, 14 days for weekly feeds and the
+Broad Dollar series, and 50 days for monthly CPI. Current mempool values use a 1-day freshness
+window.
 
-Netlify is currently used for hosting. Vercel deployment is postponed because of an
-account/workspace issue.
+## Score Method
 
-## Current Status
+Components are linearly normalized and clamped to 0–100. Higher scores mean more inflation or
+growth risk, more liquidity support, stronger blockspace activity, or more Indonesia external
+pressure, depending on the card. Available configured weights are renormalized only when coverage is
+at least 60%; below that threshold the score is withheld. Missing inputs are never treated as zero.
 
-This project is an MVP. The dashboard uses mock market data, and `GET /api/ai-report` returns a
-mock AI report instead of calling a live model or external data providers.
+| Category | Inputs, weights, normalization bounds |
+| --- | --- |
+| Inflation pressure | CPI 40% (1.5–5% higher), Core CPI 35% (1.5–4.5% higher), Brent 25% ($55–115 higher) |
+| Growth stress | Initial claims 65% (195–360k higher), 2Y yield 35% (2.5–5.5% higher) |
+| Liquidity | Broad Dollar 50% (110–130 lower is more supportive), 10Y real yield 50% (0.5–2.5% lower is more supportive) |
+| Crypto demand | Mempool virtual size 50% (0–5,000,000 vB higher), projected median fee 50% (0–50 sat/vB higher) |
+| Indonesia risk | USD/IDR 50% (14,500–17,500 higher), Broad Dollar 25% (110–130 higher), Brent 25% ($55–115 higher) |
 
-## Run Locally
+The regime classifier requires at least 60% coverage for inflation, growth, liquidity, and crypto
+blockspace scores. Commodity Inflation additionally requires observed Brent at or above $85. Fiat
+Debasement requires observed gold at or above $2,850; that series is excluded in this public-data
+tier, so the rule cannot currently trigger. Goldilocks is residual only after required coverage is
+adequate. All thresholds and the displayed confidence are heuristic.
 
-Install dependencies:
+## Local Setup
+
+Use Node.js 20 LTS or newer.
 
 ```bash
 npm install
-```
-
-Start the Next.js development server:
-
-```bash
 npm run dev
 ```
 
-Open the app at `http://localhost:3000`.
-
-The dashboard currently uses local mock observations from `data/mock-metrics.ts`. No external data
-provider keys are required for local development today.
-
-## Validate Changes
-
-Available project checks:
+Open `http://localhost:3000`. Without an EIA key, oil is visibly unavailable while the rest of the
+dashboard continues to load. To enable Brent locally, create an ignored `.env.local` file:
 
 ```bash
-npm run test
+EIA_API_KEY=your-eia-key
+```
+
+Never commit `.env.local` or expose the key to client code. Provider fetches are server-side and use
+cadence-aware Next.js caching: Mempool 300 seconds, daily feeds at least 3600 seconds, and BLS CPI
+21600 seconds.
+
+## API
+
+- `GET /api/market-data` returns the normalized observations, provenance, coverage-aware scores,
+  optional regime/playbook, and generation time.
+- `GET /api/ai-report` returns a deterministic rules brief from the same normalized service. It
+  does not call an AI model and returns a coverage brief if the regime is withheld.
+
+## Deploy On Netlify
+
+The repository is connected to the existing Netlify site at
+[macro-regime-ai-dashboard.netlify.app](https://macro-regime-ai-dashboard.netlify.app). Keep the
+production branch set to `main` and the build command set to `npm run build`; use Netlify's Next.js
+runtime integration rather than configuring a static export. To populate Brent, add `EIA_API_KEY`
+in the site's environment-variable settings for the production deploy context, then trigger a new
+deploy. If the key is absent, the dashboard remains deployable and labels oil unavailable.
+
+After deploy, verify the homepage, `/api/market-data`, and `/api/ai-report`. Check source statuses,
+the substitute labels, and that no credential appears in either API response.
+
+## Checks
+
+```bash
+npm test
 npm run lint
+npx tsc --noEmit
 npm run build
 ```
-
-Netlify validation may run these checks automatically during deploy or review. Avoid committing
-generated build output.
-
-## Macro Scores
-
-Scores are calculated in `lib/scoring.ts` on a 0-100 scale. Higher values do not always mean
-"better"; each category has its own interpretation.
-
-### Inflation Pressure
-
-Measures whether price pressure is becoming more elevated. It blends:
-
-- Headline CPI, weighted 40%
-- Core CPI, weighted 35%
-- Brent oil price, weighted 25%
-
-Higher scores mean inflation pressure is more elevated. Lower scores mean inflation pressure is
-more contained.
-
-### Growth Stress
-
-Measures whether credit and labor-market stress are rising. It blends:
-
-- High-yield credit spreads, weighted 45%
-- Jobless claims, weighted 35%
-- 2-year Treasury yield, weighted 20%
-
-Higher scores mean growth or credit stress is more elevated. Lower scores mean stress is more
-contained.
-
-### Liquidity
-
-Measures whether financial liquidity is supportive for risk assets. It blends:
-
-- Lower DXY, weighted 25%
-- Lower 10-year real yield, weighted 25%
-- Stablecoin market cap level, weighted 30%
-- Month-on-month stablecoin market cap momentum, weighted 20%
-
-Higher scores mean liquidity is more constructive. Lower scores mean liquidity is softer or more
-restrictive.
-
-### Crypto Demand
-
-Measures whether digital-asset demand is strengthening. It blends:
-
-- BTC price level, weighted 45%
-- Stablecoin market cap level, weighted 35%
-- Month-on-month BTC price momentum, weighted 20%
-
-Higher scores mean crypto demand is stronger. Lower scores mean crypto demand is softer.
-
-### Indonesia Risk
-
-Measures external pressure relevant to Indonesia-facing macro risk. It blends:
-
-- USDIDR, weighted 50%
-- DXY, weighted 25%
-- Brent oil price, weighted 25%
-
-Higher scores mean Indonesia external or FX risk is more elevated. Lower scores mean those
-pressures are more contained.
-
-## Six-Regime Classifier
-
-The classifier in `lib/scoring.ts` evaluates the scores in a fixed order and returns the first
-matching regime. This means the order matters: a snapshot that satisfies an earlier rule will not
-fall through to later rules.
-
-1. **Hard Landing**: Growth stress is at least 68, liquidity is below 42, and inflation pressure is
-   below 62. This captures acute growth stress without enough liquidity support.
-2. **Stagflation**: Inflation pressure is at least 62 and growth stress is at least 55. This
-   captures the difficult mix of sticky inflation and slowing activity.
-3. **Commodity Inflation**: Inflation pressure is at least 60 and oil is at least 85. This captures
-   an oil-driven inflation impulse.
-4. **Fiat Debasement**: Liquidity is at least 64, crypto demand is at least 63, and gold is at least
-   2850. This captures simultaneous strength in liquidity, digital assets, and gold.
-5. **Liquidity Reflation**: Liquidity is at least 52 and crypto demand is at least 54. This captures
-   a constructive liquidity and risk-appetite backdrop.
-6. **Goldilocks**: The fallback regime when no higher-priority stress, inflation, debasement, or
-   reflation condition is met. This captures a more balanced macro backdrop.
-
-Each regime also receives a deterministic confidence score based on the same inputs. The confidence
-score is a rules-based signal strength indicator, not a probability forecast.
-
-## Asset Playbook
-
-The asset playbook in `lib/playbook.ts` maps the detected regime to a research thesis and three
-asset lists:
-
-- **Favor**: Assets or exposures that the ruleset considers most aligned with the detected regime.
-- **Neutral**: Assets or exposures that the ruleset treats as mixed, secondary, or less directly
-  expressed by the regime.
-- **Reduce**: Assets or exposures that the ruleset considers less aligned with the detected regime.
-
-The playbook is descriptive and educational. It does not create trade orders, position sizes, risk
-limits, portfolio allocations, or personalized recommendations.
-
-## Mock AI Report
-
-`GET /api/ai-report` returns a mocked structured daily report using the latest local snapshot, the
-calculated scores, the detected regime, and the asset playbook. The endpoint does not call OpenAI
-yet and does not require an API key today.
-
-## Phase 2 Roadmap
-
-Phase 2 will replace the MVP mocks with live integrations for:
-
-- FRED macro data
-- CoinGecko crypto market data
-- Alpha Vantage market data
-- EIA energy data
-- Supabase persistence or synchronization, if still needed
-- OpenAI-powered report generation
-
-## Future Environment Variables
-
-The app is currently mock-data driven. Later integrations will need environment variables for data
-providers, persistence, and AI generation. Use provider-specific names that match the final
-integration code; the names below are the expected placeholders.
-
-```bash
-# FRED macro data
-FRED_API_KEY=
-
-# CoinGecko crypto market data
-COINGECKO_API_KEY=
-
-# Alpha Vantage market data
-ALPHA_VANTAGE_API_KEY=
-
-# EIA energy data
-EIA_API_KEY=
-
-# Supabase, if used for external data storage or sync jobs
-SUPABASE_URL=
-SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-
-# OpenAI, if the mocked report endpoint is upgraded to live generation
-OPENAI_API_KEY=
-OPENAI_MODEL=
-```
-
-Do not expose secret values in client components, logs, browser-visible responses, or committed
-files. Server-only keys should stay in Netlify environment variables or another secure deployment
-secret store.
-
-## Important Disclaimer
-
-This dashboard is for education, research, and scenario analysis. It uses simplified scoring rules
-and mock data, so outputs can be incomplete, stale, or wrong. Nothing in the UI, API responses,
-README, scores, regimes, or playbooks should be interpreted as financial advice or as a
-recommendation for any investment decision. Consult qualified professionals and independent data
-sources before making financial decisions.

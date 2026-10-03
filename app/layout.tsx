@@ -4,9 +4,9 @@ import type { ReactNode } from "react";
 import "@/app/globals.css";
 
 export const metadata: Metadata = {
-  title: "Macro Research Monitor",
+  title: "Macro Regime AI Dashboard",
   description:
-    "A concise rules-based monitor for inflation, growth stress, liquidity, crypto demand, and Indonesia FX risk.",
+    "A public-data macro monitor for inflation, growth stress, liquidity, Bitcoin blockspace demand, and Indonesia FX risk.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {

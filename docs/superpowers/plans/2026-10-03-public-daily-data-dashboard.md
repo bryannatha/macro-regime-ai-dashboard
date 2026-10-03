@@ -60,35 +60,39 @@
 
 ## Task 3: Build One Normalized Service for the Page and APIs
 
+Implementation note: Tasks 3 and 4 are committed atomically because the page's `DashboardPayload`
+contract and the client dashboard props change together; splitting them would leave an unbuildable
+intermediate state.
+
 **Files:** `lib/market-data/index.ts`, `lib/market-data/index.test.ts`, `app/page.tsx`, `app/api/market-data/route.ts`, `app/api/market-data/route.test.ts`, `app/api/ai-report/route.ts`, `app/api/ai-report/route.test.ts`, `lib/types.ts`.
 
-- [ ] Write orchestration tests first with mocked fetch responses: all-source success, one source failing while others remain available, missing EIA key, generated/fetched timestamps, and JSON serialization without credentials. Confirm red before implementation.
-- [ ] Implement `getDashboardPayload()` to fetch providers independently, normalize observations, calculate scores/regime/conditional playbook, and return one typed payload with generated time and source statuses. Do not import `data/mock-metrics.ts` from production service or routes.
-- [ ] Add `GET /api/market-data` returning the shared payload. Use per-feed Next.js fetch revalidation (Mempool 300 seconds; daily feeds at least 3600 seconds; BLS monthly at least 21600 seconds) and isolate provider errors at adapter boundaries.
-- [ ] Change `app/page.tsx` to await the shared service and pass that payload to the dashboard server/client boundary.
-- [ ] Rewrite `GET /api/ai-report` to consume the same payload, generate a deterministic rules brief only, and state source/coverage/heuristic limitations. If regime is withheld, return a coverage brief without inventing a regime. Change `AIReport.source` from `mock` to an explicit rules-based source.
-- [ ] Add route assertions for statuses, substitute labels, no API key in JSON, no mocked observations, and no implied AI authorship. Re-run service and route tests plus `npx tsc --noEmit`.
-- [ ] Commit as `feat: serve normalized public macro data`.
+- [x] Write orchestration tests first with mocked fetch responses: all-source success, one source failing while others remain available, missing EIA key, generated/fetched timestamps, and JSON serialization without credentials. Confirm red before implementation.
+- [x] Implement `getDashboardPayload()` to fetch providers independently, normalize observations, calculate scores/regime/conditional playbook, and return one typed payload with generated time and source statuses. Do not import `data/mock-metrics.ts` from production service or routes.
+- [x] Add `GET /api/market-data` returning the shared payload. Use per-feed Next.js fetch revalidation (Mempool 300 seconds; daily feeds at least 3600 seconds; BLS monthly at least 21600 seconds) and isolate provider errors at adapter boundaries.
+- [x] Change `app/page.tsx` to await the shared service and pass that payload to the dashboard server/client boundary.
+- [x] Rewrite `GET /api/ai-report` to consume the same payload, generate a deterministic rules brief only, and state source/coverage/heuristic limitations. If regime is withheld, return a coverage brief without inventing a regime. Change `AIReport.source` from `mock` to an explicit rules-based source.
+- [x] Add route assertions for statuses, substitute labels, no API key in JSON, no mocked observations, and no implied AI authorship. Re-run service and route tests plus `npx tsc --noEmit`.
+- [x] Commit service, API, page, and dashboard payload integration atomically with Task 4 as `feat: serve normalized public macro data`.
 
 ## Task 4: Replace Synthetic Dashboard States with Source-Aware Monitoring UI
 
 **Files:** `components/dashboard/regime-dashboard.tsx`, `data/mock-metrics.ts` (remove production use; keep only if useful for development fixtures), `README.md`, `app/globals.css` only if needed.
 
-- [ ] Add focused render/formatting tests for available, stale, unavailable, excluded, score-under-coverage, regime-withheld, and disclaimer states. Use deterministic payload fixtures; confirm they fail against the current mock-only props.
-- [ ] Refactor dashboard props to consume `DashboardPayload`; display current regime or clear coverage state first, then five score cards with coverage and honest unavailable states, concise provider-history charts, and a provenance-rich observation table.
-- [ ] Remove computed mock score-history charts and any text describing synthetic samples as current. Only chart dated histories supplied by providers; omit a chart when a provider does not supply enough real observations.
-- [ ] Show substitute/excluded sources explicitly, including Broad Dollar vs ICE DXY, ECB-derived cross vs JISDOR/spot, excluded BTC/HY/gold/stablecoins, and crypto blockspace proxy limitations. Show provider observation time, fetch time, cadence, and stale labels (daily >3 days, weekly >14 days, monthly >50 days; H.10 >14 days).
-- [ ] Keep playbook conditional on a classified regime. Keep the rules brief visibly rules-generated, include coverage and provisional/not-backtested language, and make no AI-generation claim.
-- [ ] Preserve the exact educational disclaimer and make unavailable values visibly distinct from zero. Update README with source notes, score methodology/bounds, local setup, `EIA_API_KEY` configuration, and Netlify deployment steps.
-- [ ] Run render tests, `npm run lint` (repair the script if Next 15 reports `next lint` unsupported), and `npx tsc --noEmit`; manually inspect the responsive dashboard in browser at desktop and mobile widths.
-- [ ] Commit as `feat: present source-aware daily macro dashboard`.
+- [x] Add focused render/formatting tests for available, stale, unavailable, excluded, score-under-coverage, regime-withheld, and disclaimer states. Use deterministic payload fixtures; confirm they fail against the current mock-only props.
+- [x] Refactor dashboard props to consume `DashboardPayload`; display current regime or clear coverage state first, then five score cards with coverage and honest unavailable states, concise provider-history charts, and a provenance-rich observation table.
+- [x] Remove computed mock score-history charts and any text describing synthetic samples as current. Only chart dated histories supplied by providers; omit a chart when a provider does not supply enough real observations.
+- [x] Show substitute/excluded sources explicitly, including Broad Dollar vs ICE DXY, ECB-derived cross vs JISDOR/spot, excluded BTC/HY/gold/stablecoins, and crypto blockspace proxy limitations. Show provider observation time, fetch time, cadence, and stale labels (daily >3 days, weekly >14 days, monthly >50 days; H.10 >14 days).
+- [x] Keep playbook conditional on a classified regime. Keep the rules brief visibly rules-generated, include coverage and provisional/not-backtested language, and make no AI-generation claim.
+- [x] Preserve the exact educational disclaimer and make unavailable values visibly distinct from zero. Update README with source notes, score methodology/bounds, local setup, `EIA_API_KEY` configuration, and Netlify deployment steps.
+- [x] Run render tests, `npm run lint` (repair the script if Next 15 reports `next lint` unsupported), and `npx tsc --noEmit`; manually inspect the responsive dashboard in browser at desktop and mobile widths.
+- [x] Included in the atomic Task 3 integration commit above.
 
 ## Task 5: Full Verification and Public Deployment
 
 **Files:** `package.json`, lockfile, `README.md`, any narrowly scoped fixes from verification.
 
-- [ ] Run `npm test`, `npm run lint`, and `npm run build`; resolve failures and repeat the complete suite. Do not claim verification if sandbox access blocks the test runner; request the needed permission or use an authorized shell and record the result.
-- [ ] Inspect production build output and confirm no route or client bundle contains `EIA_API_KEY`, no provider secrets are returned, and no production imports remain from `data/mock-metrics.ts`.
-- [ ] Run locally without `EIA_API_KEY`; confirm the page and both routes render with oil unavailable and no sample fallback. With a valid key available only through environment configuration, confirm Brent populates with EIA provenance. Do not commit or print the key.
+- [x] Run `npm test`, `npm run lint`, `npx tsc --noEmit`, and `npm run build`; all pass (44 tests). `npm audit --omit=dev` reports zero vulnerabilities with Next.js 15.5.27 and the PostCSS 8.5.28 override.
+- [x] Inspect production build output and confirm no client bundle contains credential markers, API responses contain no credential field, and no production imports remain from `data/mock-metrics.ts`.
+- [x] Run locally without `EIA_API_KEY`; page and both routes render, oil is unavailable with a null value, and there is no sample fallback. No valid EIA key was available to verify populated Brent; do not commit or print credentials.
 - [ ] Verify the deployed Netlify production URL after pushing the authorized `main` branch. Set `EIA_API_KEY` only in Netlify environment settings if credentials are available; otherwise leave oil visibly unavailable and report that action as outstanding. Check the homepage and `/api/market-data` and `/api/ai-report` for valid JSON/HTML and current source statuses.
 - [ ] Review final diff, run `git status`, commit only task-scoped changes, and push `main` to `origin` as previously authorized. Report build/test/deployment results and any unavailable credential explicitly.

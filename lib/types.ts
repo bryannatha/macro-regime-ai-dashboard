@@ -1,24 +1,3 @@
-export type MetricKey =
-  | "cpi"
-  | "coreCpi"
-  | "oil"
-  | "dxy"
-  | "twoYearYield"
-  | "tenYearRealYield"
-  | "hySpread"
-  | "joblessClaims"
-  | "btcPrice"
-  | "stablecoinMarketCap"
-  | "usdidr"
-  | "goldPrice";
-
-export type MetricSet = Record<MetricKey, number>;
-
-export interface MarketSnapshot {
-  date: string;
-  metrics: MetricSet;
-}
-
 export type ObservationKey =
   | "cpi"
   | "coreCpi"
@@ -102,14 +81,23 @@ export interface AssetPlaybook {
   neutral: string[];
 }
 
+export interface DashboardPayload {
+  generatedAt: string;
+  dataAsOf: string | null;
+  observations: ObservationMap;
+  scores: CategoryScore[];
+  regime: RegimeAssessment | null;
+  playbook: AssetPlaybook | null;
+}
+
 export interface AIReport {
   generatedAt: string;
-  dataAsOf: string;
+  dataAsOf: string | null;
   title: string;
-  regime: Regime;
+  regime: Regime | null;
   executiveSummary: string;
   signals: string[];
   watchlist: string[];
   riskNote: string;
-  source: "mock";
+  source: "rules-based";
 }

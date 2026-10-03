@@ -1,33 +1,54 @@
-import { latestSnapshot, previousSnapshot } from "@/data/mock-metrics";
-import { getPlaybook } from "@/lib/playbook";
-import { calculateScores, classifyRegime } from "@/lib/scoring";
-import type { AIReport } from "@/lib/types";
+import { getDashboardPayload } from "@/lib/market-data";
+import type { AIReport, CategoryScore, ScoreKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export function GET() {
-  const scores = calculateScores(latestSnapshot, previousSnapshot);
-  const assessment = classifyRegime(latestSnapshot, scores);
-  const playbook = getPlaybook(assessment.regime);
-  const highestSignals = [...scores].sort((a, b) => b.score - a.score).slice(0, 3);
+const requiredCore: ScoreKey[] = [
+  "inflationPressure",
+  "growthStress",
+  "liquidity",
+  "cryptoDemand",
+];
 
+function coverageLine(scores: CategoryScore[]): string {
+  return requiredCore.map((key) => {
+    const score = scores.find((item) => item.key === key);
+    return `${score?.label ?? key}: ${score?.coveragePercent ?? 0}% coverage${score?.score === null || score?.score === undefined ? " (score withheld)" : ""}`;
+  }).join("; ");
+}
+
+export async function GET() {
+  const payload = await getDashboardPayload();
+  const availableSignals = payload.scores
+    .filter((score) => score.score !== null)
+    .sort((left, right) => (right.score ?? 0) - (left.score ?? 0))
+    .slice(0, 3);
+  const signals = availableSignals.map(
+    (signal) => `${signal.label}: ${signal.score}/100 (${signal.reading}; ${signal.coveragePercent}% coverage). ${signal.summary}`,
+  );
+  const coverage = coverageLine(payload.scores);
+  const regime = payload.regime?.regime ?? null;
+  const summary = payload.regime && payload.playbook
+    ? `${payload.regime.rationale.join(" ")} ${payload.playbook.thesis} The regime is a deterministic rules classification with provisional, unbacktested thresholds. ${coverage}.`
+    : `Regime withheld because one or more required core categories has less than 60% input coverage. ${coverage}. Missing inputs are not treated as zero.`;
+  const unavailable = Object.values(payload.observations)
+    .filter((observation) => observation.status === "unavailable")
+    .map((observation) => `${observation.label}: unavailable; check the source status and cadence.`);
+  const watchlist = [
+    ...unavailable.slice(0, 4),
+    "Brent above $85 is a provisional ruleset watch level, not a forecast or trade trigger.",
+    "The USD/IDR value is an ECB-derived reference cross, not BI JISDOR or tradable spot FX.",
+  ];
   const report: AIReport = {
-    generatedAt: new Date().toISOString(),
-    dataAsOf: latestSnapshot.date,
-    title: `Rules Brief: ${assessment.regime}`,
-    regime: assessment.regime,
-    executiveSummary: `${assessment.rationale[0]} ${playbook.thesis} This narrative is generated from mock observations and deterministic scoring rules.`,
-    signals: highestSignals.map(
-      (signal) => `${signal.label}: ${signal.score}/100 (${signal.reading}) - ${signal.summary}`,
-    ),
-    watchlist: [
-      `Review USD/IDR if it moves materially above the ${latestSnapshot.metrics.usdidr.toLocaleString("en-US")} demo reference.`,
-      `Compare stablecoin supply with the $${latestSnapshot.metrics.stablecoinMarketCap.toFixed(1)}bn demo reference before treating liquidity as confirmed.`,
-      "Brent above $85 is a ruleset watch level, not a forecast or trade trigger.",
-    ],
-    riskNote:
-      "Synthetic sample data; the report is rules-generated, not AI-generated. Research context only, not investment advice.",
-    source: "mock",
+    generatedAt: payload.generatedAt,
+    dataAsOf: payload.dataAsOf,
+    title: regime ? `Rules Brief: ${regime}` : "Coverage Brief: regime withheld",
+    regime,
+    executiveSummary: summary,
+    signals,
+    watchlist,
+    riskNote: "Rules-generated, not AI-generated. Scores and thresholds are provisional and not backtested. The crypto score is an on-chain blockspace proxy, not BTC price, buying pressure, or investor flows. The Broad Dollar Index is not ICE DXY. Public observations may be delayed or revised. Educational research tool, not financial advice.",
+    source: "rules-based",
   };
 
   return Response.json(report);

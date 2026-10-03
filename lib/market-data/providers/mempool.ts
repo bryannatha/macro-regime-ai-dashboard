@@ -7,13 +7,6 @@ const sourceUrl = "https://mempool.space/docs/api/rest";
 const base = "https://mempool.space/api";
 type MempoolResult = { mempoolVsize: MetricObservation; mempoolMedianFeeRate: MetricObservation };
 
-function unavailable(fetchedAt: string, detail: string): MempoolResult {
-  return {
-    mempoolVsize: observationFailure("mempoolVsize", "Bitcoin mempool backlog", "vB", source, sourceUrl, fetchedAt, "Current", detail),
-    mempoolMedianFeeRate: observationFailure("mempoolMedianFeeRate", "Projected block median fee", "sat/vB", source, sourceUrl, fetchedAt, "Current", detail),
-  };
-}
-
 export function parseMempoolDemand(mempool: unknown, blocks: unknown, fetchedAt: string): MempoolResult {
   const date = fetchedAt.slice(0, 10);
   const detail = "On-chain blockspace demand proxy; not BTC price or market buying demand.";
