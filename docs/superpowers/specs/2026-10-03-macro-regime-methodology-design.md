@@ -2,7 +2,7 @@
 
 ## Status
 
-User review requested. This document supersedes the regime taxonomy, score direction, coverage, and playbook decisions in `2026-10-03-public-daily-data-design.md`. It does not discard that work's server-only provider architecture, provenance, public-source constraint, or Netlify deployment target.
+Superseded by [Macro Regime Methodology and Data Architecture Design - Revised](2026-10-03-macro-regime-methodology-revised.md), version `US-MACRO-0.2-review`. Retained as the original design/review record; do not implement its old rules. The revised document preserves the server-only provider architecture, provenance, public-source constraint and Netlify target while replacing the methodology choices below.
 
 ## Goal
 

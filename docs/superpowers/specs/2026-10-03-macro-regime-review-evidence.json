@@ -1,0 +1,2614 @@
+{
+  "methodologyVersion": "US-MACRO-0.2-review",
+  "scope": "Synthetic in-memory analytical worksheet; not production code/tests or historical validation",
+  "inputAliases": {
+    "pi": "deltaPi",
+    "dp": "deltaP",
+    "real": "r: ex-post real-policy proxy",
+    "realChange": "deltaR",
+    "targetChange": "deltaTarget",
+    "worsening": "count of core stress momenta >=8"
+  },
+  "inputDefaults": {
+    "pi": 0,
+    "dp": 0,
+    "real": 1,
+    "realChange": 0,
+    "targetChange": 0,
+    "worsening": 0
+  },
+  "thresholds": {
+    "iContained": 45,
+    "iHot": 60,
+    "iAccelFloor": 50,
+    "gRes": 45,
+    "lRes": 50,
+    "aWeak": 55,
+    "gSlow": 50,
+    "lSlow": 55,
+    "pMax": 55,
+    "cBenign": 50,
+    "qBenign": 55,
+    "cVeto": 65,
+    "qVeto": 70,
+    "extreme": 80,
+    "gContract": 65,
+    "lContract": 60
+  },
+  "fixtures": [
+    {
+      "name": "Contained resilient",
+      "inputs": {
+        "I": 30,
+        "G": 25,
+        "L": 30,
+        "P": 30,
+        "C": 25,
+        "Q": 35
+      },
+      "result": "GOLDILOCKS",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "robustness": "ROBUST",
+      "cases": [
+        {
+          "id": "iContained:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "iContained:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "iHot:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "iHot:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "iAccelFloor:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "iAccelFloor:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "gRes:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "gRes:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "lRes:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "lRes:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "aWeak:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "aWeak:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "gSlow:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "gSlow:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "lSlow:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "lSlow:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "pMax:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "pMax:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "cBenign:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "cBenign:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "qBenign:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "qBenign:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "cVeto:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "cVeto:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "qVeto:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "qVeto:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "extreme:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "extreme:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "gContract:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "gContract:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "lContract:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "lContract:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "all:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "all:5",
+          "result": "GOLDILOCKS"
+        }
+      ]
+    },
+    {
+      "name": "Inflation before policy response",
+      "inputs": {
+        "I": 75,
+        "G": 25,
+        "L": 25,
+        "P": 20,
+        "C": 20,
+        "Q": 20,
+        "pi": 0.8
+      },
+      "result": "OVERHEATING_REFLATION",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "robustness": "ROBUST",
+      "cases": [
+        {
+          "id": "iContained:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "iContained:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "iHot:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "iHot:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "iAccelFloor:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "iAccelFloor:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gRes:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gRes:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lRes:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lRes:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "aWeak:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "aWeak:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gSlow:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gSlow:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lSlow:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lSlow:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "pMax:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "pMax:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "cBenign:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "cBenign:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "qBenign:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "qBenign:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "cVeto:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "cVeto:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "qVeto:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "qVeto:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "extreme:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "extreme:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gContract:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gContract:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lContract:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lContract:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "all:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "all:5",
+          "result": "OVERHEATING_REFLATION"
+        }
+      ]
+    },
+    {
+      "name": "High but cooling inflation expansion",
+      "inputs": {
+        "I": 85,
+        "G": 25,
+        "L": 30,
+        "P": 30,
+        "C": 25,
+        "Q": 25,
+        "pi": -1.2
+      },
+      "result": "OVERHEATING_REFLATION",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "robustness": "ROBUST",
+      "cases": [
+        {
+          "id": "iContained:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "iContained:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "iHot:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "iHot:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "iAccelFloor:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "iAccelFloor:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gRes:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gRes:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lRes:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lRes:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "aWeak:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "aWeak:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gSlow:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gSlow:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lSlow:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lSlow:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "pMax:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "pMax:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "cBenign:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "cBenign:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "qBenign:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "qBenign:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "cVeto:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "cVeto:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "qVeto:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "qVeto:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "extreme:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "extreme:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gContract:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gContract:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lContract:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lContract:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "all:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "all:5",
+          "result": "OVERHEATING_REFLATION"
+        }
+      ]
+    },
+    {
+      "name": "Stagflation with calm finance",
+      "inputs": {
+        "I": 75,
+        "G": 65,
+        "L": 65,
+        "P": 20,
+        "C": 20,
+        "Q": 20,
+        "pi": 0
+      },
+      "result": "STAGFLATIONARY",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "robustness": "ROBUST",
+      "cases": [
+        {
+          "id": "iContained:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "iContained:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "iHot:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "iHot:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "iAccelFloor:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "iAccelFloor:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "gRes:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "gRes:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "lRes:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "lRes:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "aWeak:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "aWeak:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "gSlow:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "gSlow:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "lSlow:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "lSlow:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "pMax:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "pMax:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "cBenign:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "cBenign:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "qBenign:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "qBenign:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "cVeto:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "cVeto:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "qVeto:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "qVeto:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "extreme:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "extreme:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "gContract:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "gContract:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "lContract:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "lContract:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "all:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "all:5",
+          "result": "STAGFLATIONARY"
+        }
+      ]
+    },
+    {
+      "name": "Cooling stagflation",
+      "inputs": {
+        "I": 85,
+        "G": 70,
+        "L": 65,
+        "P": 30,
+        "C": 25,
+        "Q": 25,
+        "pi": -1.2
+      },
+      "result": "STAGFLATIONARY",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "robustness": "ROBUST",
+      "cases": [
+        {
+          "id": "iContained:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "iContained:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "iHot:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "iHot:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "iAccelFloor:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "iAccelFloor:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "gRes:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "gRes:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "lRes:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "lRes:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "aWeak:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "aWeak:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "gSlow:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "gSlow:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "lSlow:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "lSlow:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "pMax:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "pMax:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "cBenign:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "cBenign:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "qBenign:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "qBenign:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "cVeto:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "cVeto:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "qVeto:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "qVeto:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "extreme:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "extreme:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "gContract:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "gContract:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "lContract:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "lContract:5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "all:-5",
+          "result": "STAGFLATIONARY"
+        },
+        {
+          "id": "all:5",
+          "result": "STAGFLATIONARY"
+        }
+      ]
+    },
+    {
+      "name": "Severe weakness and low inflation",
+      "inputs": {
+        "I": 30,
+        "G": 85,
+        "L": 80,
+        "P": 30,
+        "C": 20,
+        "Q": 20
+      },
+      "result": "CONTRACTION_RECESSIONARY",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "robustness": "ROBUST",
+      "cases": [
+        {
+          "id": "iContained:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "iContained:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "iHot:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "iHot:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "iAccelFloor:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "iAccelFloor:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "gRes:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "gRes:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "lRes:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "lRes:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "aWeak:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "aWeak:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "gSlow:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "gSlow:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "lSlow:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "lSlow:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "pMax:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "pMax:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "cBenign:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "cBenign:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "qBenign:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "qBenign:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "cVeto:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "cVeto:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "qVeto:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "qVeto:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "extreme:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "extreme:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "gContract:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "gContract:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "lContract:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "lContract:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "all:-5",
+          "result": "CONTRACTION_RECESSIONARY"
+        },
+        {
+          "id": "all:5",
+          "result": "CONTRACTION_RECESSIONARY"
+        }
+      ]
+    },
+    {
+      "name": "Disinflationary slowdown",
+      "inputs": {
+        "I": 30,
+        "G": 58,
+        "L": 52,
+        "P": 50,
+        "C": 45,
+        "Q": 45,
+        "pi": -0.5
+      },
+      "result": "DISINFLATIONARY_SLOWDOWN",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "robustness": "ROBUST",
+      "cases": [
+        {
+          "id": "iContained:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "iContained:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "iHot:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "iHot:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "iAccelFloor:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "iAccelFloor:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "gRes:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "gRes:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "lRes:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "lRes:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "aWeak:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "aWeak:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "gSlow:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "gSlow:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "lSlow:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "lSlow:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "pMax:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "pMax:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "cBenign:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "cBenign:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "qBenign:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "qBenign:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "cVeto:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "cVeto:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "qVeto:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "qVeto:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "extreme:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "extreme:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "gContract:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "gContract:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "lContract:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "lContract:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "all:-5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        },
+        {
+          "id": "all:5",
+          "result": "DISINFLATIONARY_SLOWDOWN"
+        }
+      ]
+    },
+    {
+      "name": "High quality contradiction",
+      "inputs": {
+        "I": 75,
+        "G": 25,
+        "L": 70,
+        "P": 50,
+        "C": 40,
+        "Q": 40,
+        "pi": 0.8
+      },
+      "result": "MIXED",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "robustness": "ROBUST",
+      "cases": [
+        {
+          "id": "iContained:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iContained:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iHot:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iHot:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iAccelFloor:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iAccelFloor:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gRes:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gRes:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lRes:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lRes:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "aWeak:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "aWeak:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gSlow:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gSlow:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lSlow:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lSlow:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "pMax:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "pMax:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cBenign:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cBenign:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qBenign:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qBenign:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cVeto:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cVeto:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qVeto:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qVeto:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "extreme:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "extreme:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gContract:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gContract:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lContract:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lContract:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "all:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "all:5",
+          "result": "MIXED"
+        }
+      ]
+    },
+    {
+      "name": "Restrictive policy",
+      "inputs": {
+        "I": 30,
+        "G": 25,
+        "L": 30,
+        "P": 75,
+        "C": 25,
+        "Q": 25,
+        "real": 3
+      },
+      "result": "MIXED",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "robustness": "ROBUST",
+      "cases": [
+        {
+          "id": "iContained:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iContained:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iHot:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iHot:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iAccelFloor:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iAccelFloor:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gRes:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gRes:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lRes:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lRes:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "aWeak:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "aWeak:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gSlow:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gSlow:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lSlow:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lSlow:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "pMax:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "pMax:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cBenign:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cBenign:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qBenign:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qBenign:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cVeto:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cVeto:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qVeto:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qVeto:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "extreme:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "extreme:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gContract:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gContract:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lContract:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lContract:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "all:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "all:5",
+          "result": "MIXED"
+        }
+      ]
+    },
+    {
+      "name": "Diluted policy score",
+      "inputs": {
+        "I": 30,
+        "G": 25,
+        "L": 30,
+        "P": 50,
+        "C": 25,
+        "Q": 25,
+        "real": 3
+      },
+      "result": "MIXED",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "robustness": "ROBUST",
+      "cases": [
+        {
+          "id": "iContained:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iContained:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iHot:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iHot:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iAccelFloor:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iAccelFloor:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gRes:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gRes:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lRes:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lRes:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "aWeak:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "aWeak:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gSlow:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gSlow:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lSlow:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lSlow:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "pMax:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "pMax:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cBenign:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cBenign:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qBenign:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qBenign:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cVeto:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cVeto:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qVeto:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qVeto:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "extreme:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "extreme:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gContract:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gContract:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lContract:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lContract:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "all:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "all:5",
+          "result": "MIXED"
+        }
+      ]
+    },
+    {
+      "name": "Fast real tightening",
+      "inputs": {
+        "I": 30,
+        "G": 25,
+        "L": 30,
+        "P": 50,
+        "C": 25,
+        "Q": 25,
+        "real": 1.2,
+        "realChange": 0.8
+      },
+      "result": "MIXED",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "robustness": "ROBUST",
+      "cases": [
+        {
+          "id": "iContained:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iContained:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iHot:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iHot:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iAccelFloor:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iAccelFloor:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gRes:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gRes:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lRes:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lRes:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "aWeak:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "aWeak:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gSlow:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gSlow:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lSlow:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lSlow:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "pMax:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "pMax:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cBenign:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cBenign:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qBenign:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qBenign:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cVeto:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cVeto:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qVeto:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qVeto:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "extreme:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "extreme:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gContract:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gContract:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lContract:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lContract:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "all:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "all:5",
+          "result": "MIXED"
+        }
+      ]
+    },
+    {
+      "name": "Credit stress despite liquidity",
+      "inputs": {
+        "I": 30,
+        "G": 25,
+        "L": 30,
+        "P": 30,
+        "C": 79,
+        "Q": 25
+      },
+      "result": "MIXED",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "robustness": "ROBUST",
+      "cases": [
+        {
+          "id": "iContained:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iContained:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iHot:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iHot:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iAccelFloor:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iAccelFloor:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gRes:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gRes:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lRes:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lRes:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "aWeak:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "aWeak:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gSlow:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gSlow:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lSlow:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lSlow:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "pMax:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "pMax:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cBenign:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cBenign:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qBenign:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qBenign:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cVeto:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cVeto:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qVeto:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qVeto:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "extreme:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "extreme:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gContract:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gContract:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lContract:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lContract:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "all:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "all:5",
+          "result": "MIXED"
+        }
+      ]
+    },
+    {
+      "name": "Boundary Goldilocks",
+      "inputs": {
+        "I": 45,
+        "G": 45,
+        "L": 50,
+        "P": 55,
+        "C": 50,
+        "Q": 55
+      },
+      "result": "GOLDILOCKS",
+      "same": 28,
+      "total": 34,
+      "singleAgreement": 0.84375,
+      "coherentAgreement": 0.5,
+      "robustness": "FRAGILE",
+      "cases": [
+        {
+          "id": "iContained:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iContained:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "iHot:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "iHot:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "iAccelFloor:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "iAccelFloor:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "gRes:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gRes:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "lRes:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lRes:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "aWeak:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "aWeak:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "gSlow:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "gSlow:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "lSlow:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "lSlow:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "pMax:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "pMax:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "cBenign:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "cBenign:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "qBenign:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "qBenign:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "cVeto:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "cVeto:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "qVeto:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "qVeto:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "extreme:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "extreme:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "gContract:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "gContract:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "lContract:-5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "lContract:5",
+          "result": "GOLDILOCKS"
+        },
+        {
+          "id": "all:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "all:5",
+          "result": "GOLDILOCKS"
+        }
+      ]
+    },
+    {
+      "name": "Inflation floor acceleration",
+      "inputs": {
+        "I": 52,
+        "G": 25,
+        "L": 30,
+        "P": 20,
+        "C": 20,
+        "Q": 20,
+        "pi": 0.8
+      },
+      "result": "OVERHEATING_REFLATION",
+      "same": 32,
+      "total": 34,
+      "singleAgreement": 0.96875,
+      "coherentAgreement": 0.5,
+      "robustness": "FRAGILE",
+      "cases": [
+        {
+          "id": "iContained:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "iContained:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "iHot:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "iHot:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "iAccelFloor:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "iAccelFloor:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gRes:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gRes:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lRes:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lRes:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "aWeak:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "aWeak:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gSlow:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gSlow:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lSlow:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lSlow:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "pMax:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "pMax:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "cBenign:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "cBenign:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "qBenign:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "qBenign:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "cVeto:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "cVeto:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "qVeto:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "qVeto:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "extreme:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "extreme:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gContract:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "gContract:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lContract:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "lContract:5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "all:-5",
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "id": "all:5",
+          "result": "MIXED"
+        }
+      ]
+    },
+    {
+      "name": "Reflation below stress floor",
+      "inputs": {
+        "I": 25,
+        "G": 25,
+        "L": 30,
+        "P": 20,
+        "C": 20,
+        "Q": 20,
+        "pi": 0.8
+      },
+      "result": "MIXED",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "robustness": "ROBUST",
+      "cases": [
+        {
+          "id": "iContained:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iContained:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iHot:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iHot:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iAccelFloor:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "iAccelFloor:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gRes:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gRes:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lRes:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lRes:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "aWeak:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "aWeak:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gSlow:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gSlow:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lSlow:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lSlow:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "pMax:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "pMax:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cBenign:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cBenign:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qBenign:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qBenign:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cVeto:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "cVeto:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qVeto:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "qVeto:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "extreme:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "extreme:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gContract:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "gContract:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lContract:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "lContract:5",
+          "result": "MIXED"
+        },
+        {
+          "id": "all:-5",
+          "result": "MIXED"
+        },
+        {
+          "id": "all:5",
+          "result": "MIXED"
+        }
+      ]
+    }
+  ],
+  "ruleOrder": {
+    "evaluations": 1800,
+    "discrepancies": 0
+  },
+  "qualityRemoval": {
+    "weights": [
+      0.2,
+      0.15,
+      0.25,
+      0.1,
+      0.18,
+      0.12
+    ],
+    "qualities": [
+      0.91,
+      0.8,
+      0.95,
+      0.88,
+      0.75,
+      1
+    ],
+    "masks": 64,
+    "directedEdges": 192,
+    "increases": 0
+  },
+  "missingSupportingSweeps": [
+    {
+      "fixture": "Contained resilient",
+      "creditCompletions": [
+        {
+          "C": 0,
+          "result": "GOLDILOCKS"
+        },
+        {
+          "C": 5,
+          "result": "GOLDILOCKS"
+        },
+        {
+          "C": 10,
+          "result": "GOLDILOCKS"
+        },
+        {
+          "C": 15,
+          "result": "GOLDILOCKS"
+        },
+        {
+          "C": 20,
+          "result": "GOLDILOCKS"
+        },
+        {
+          "C": 25,
+          "result": "GOLDILOCKS"
+        },
+        {
+          "C": 30,
+          "result": "GOLDILOCKS"
+        },
+        {
+          "C": 35,
+          "result": "GOLDILOCKS"
+        },
+        {
+          "C": 40,
+          "result": "GOLDILOCKS"
+        },
+        {
+          "C": 45,
+          "result": "GOLDILOCKS"
+        },
+        {
+          "C": 50,
+          "result": "GOLDILOCKS"
+        },
+        {
+          "C": 55,
+          "result": "GOLDILOCKS"
+        },
+        {
+          "C": 60,
+          "result": "GOLDILOCKS"
+        },
+        {
+          "C": 65,
+          "result": "MIXED"
+        },
+        {
+          "C": 70,
+          "result": "MIXED"
+        },
+        {
+          "C": 75,
+          "result": "MIXED"
+        },
+        {
+          "C": 80,
+          "result": "MIXED"
+        },
+        {
+          "C": 85,
+          "result": "MIXED"
+        },
+        {
+          "C": 90,
+          "result": "MIXED"
+        },
+        {
+          "C": 95,
+          "result": "MIXED"
+        },
+        {
+          "C": 100,
+          "result": "MIXED"
+        }
+      ]
+    },
+    {
+      "fixture": "Inflation before policy response",
+      "creditCompletions": [
+        {
+          "C": 0,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 5,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 10,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 15,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 20,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 25,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 30,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 35,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 40,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 45,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 50,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 55,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 60,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 65,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 70,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 75,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 80,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 85,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 90,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 95,
+          "result": "OVERHEATING_REFLATION"
+        },
+        {
+          "C": 100,
+          "result": "OVERHEATING_REFLATION"
+        }
+      ]
+    }
+  ],
+  "missingContributionExample": {
+    "weights": [
+      0.4,
+      0.3,
+      0.3
+    ],
+    "before": [
+      90,
+      20,
+      20
+    ],
+    "beforeScore": 48,
+    "afterDisplay": 20,
+    "coverage": 0.6,
+    "bounds": [
+      12,
+      52
+    ],
+    "lowGate45": "unknown"
+  },
+  "highQualityMixed": {
+    "freshness": 1,
+    "history": 0.55,
+    "release": 1,
+    "health": 1,
+    "eligible": 1,
+    "dataQuality": 91,
+    "winningSupport": 0,
+    "thresholdAgreement": 100,
+    "coreConflict": 70,
+    "regimeClarity": 41
+  }
+}
