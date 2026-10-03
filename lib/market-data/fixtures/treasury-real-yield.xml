@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed>
+  <entry><content><m:properties>
+    <d:NEW_DATE>2026-10-01T00:00:00</d:NEW_DATE><d:TC_10YEAR>1.82</d:TC_10YEAR>
+  </m:properties></content></entry>
+  <entry><content><m:properties>
+    <d:NEW_DATE>2026-10-02T00:00:00</d:NEW_DATE><d:TC_10YEAR>1.79</d:TC_10YEAR>
+  </m:properties></content></entry>
+</feed>

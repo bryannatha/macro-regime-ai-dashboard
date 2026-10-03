@@ -19,6 +19,46 @@ export interface MarketSnapshot {
   metrics: MetricSet;
 }
 
+export type ObservationKey =
+  | "cpi"
+  | "coreCpi"
+  | "oil"
+  | "broadDollarIndex"
+  | "twoYearYield"
+  | "tenYearRealYield"
+  | "joblessClaims"
+  | "mempoolVsize"
+  | "mempoolMedianFeeRate"
+  | "usdidr"
+  | "btcPrice"
+  | "hySpread"
+  | "goldPrice"
+  | "stablecoinMarketCap";
+
+export type ObservationStatus = "available" | "unavailable" | "excluded";
+
+export interface ObservationPoint {
+  date: string;
+  value: number;
+}
+
+export interface MetricObservation {
+  key: ObservationKey;
+  label: string;
+  value: number | null;
+  unit: string;
+  source: string;
+  sourceUrl: string | null;
+  observedAt: string | null;
+  fetchedAt: string;
+  cadence: "Current" | "Daily" | "Weekly" | "Monthly";
+  status: ObservationStatus;
+  detail: string;
+  history: ObservationPoint[];
+}
+
+export type ObservationMap = Record<ObservationKey, MetricObservation>;
+
 export type ScoreKey =
   | "inflationPressure"
   | "growthStress"

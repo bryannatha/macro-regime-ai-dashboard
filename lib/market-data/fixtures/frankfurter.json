@@ -1,0 +1,6 @@
+[
+  { "date": "2026-10-01", "base": "EUR", "quote": "IDR", "rate": 20274.71 },
+  { "date": "2026-10-01", "base": "EUR", "quote": "USD", "rate": 1.1298 },
+  { "date": "2026-10-02", "base": "EUR", "quote": "IDR", "rate": 20149.32 },
+  { "date": "2026-10-02", "base": "EUR", "quote": "USD", "rate": 1.1225 }
+]
