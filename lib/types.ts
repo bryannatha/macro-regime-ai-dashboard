@@ -71,10 +71,13 @@ export type ScoreOrientation = "risk" | "support" | "demand";
 export interface CategoryScore {
   key: ScoreKey;
   label: string;
-  score: number;
+  score: number | null;
+  coverage: number;
+  coveragePercent: number;
   orientation: ScoreOrientation;
   reading: string;
   summary: string;
+  explanation: string;
 }
 
 export type Regime =
