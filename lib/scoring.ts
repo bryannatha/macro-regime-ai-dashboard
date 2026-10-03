@@ -3,105 +3,156 @@ import type {
   MarketSnapshot,
   RegimeAssessment,
   ScoreKey,
+  ScoreOrientation,
 } from "@/lib/types";
+import type { MetricKey } from "@/lib/types";
+
+type ScoringInput = MetricKey | "btcMomentum" | "stablecoinMomentum";
+type ScoringComponent = {
+  input: ScoringInput;
+  weight: number;
+  low: number;
+  high: number;
+  direction: "higher" | "lower";
+};
+type ScoringDefinition = {
+  label: string;
+  orientation: ScoreOrientation;
+  description: string;
+  components: ScoringComponent[];
+};
+
+export const SCORING_MODEL = {
+  inflationPressure: {
+    label: "Inflation pressure",
+    orientation: "risk",
+    description: "Higher readings indicate stronger price pressure.",
+    components: [
+      { input: "cpi", weight: 0.4, low: 1.5, high: 5, direction: "higher" },
+      { input: "coreCpi", weight: 0.35, low: 1.5, high: 4.5, direction: "higher" },
+      { input: "oil", weight: 0.25, low: 55, high: 115, direction: "higher" },
+    ],
+  },
+  growthStress: {
+    label: "Growth stress",
+    orientation: "risk",
+    description: "Higher readings indicate tighter credit and weaker labor conditions.",
+    components: [
+      { input: "hySpread", weight: 0.45, low: 250, high: 700, direction: "higher" },
+      { input: "joblessClaims", weight: 0.35, low: 195, high: 360, direction: "higher" },
+      { input: "twoYearYield", weight: 0.2, low: 2.5, high: 5.5, direction: "higher" },
+    ],
+  },
+  liquidity: {
+    label: "Liquidity",
+    orientation: "support",
+    description: "Higher readings indicate easier dollar funding and expanding tokenized cash supply.",
+    components: [
+      { input: "dxy", weight: 0.25, low: 95, high: 110, direction: "lower" },
+      { input: "tenYearRealYield", weight: 0.25, low: 0.5, high: 2.5, direction: "lower" },
+      { input: "stablecoinMarketCap", weight: 0.3, low: 160, high: 260, direction: "higher" },
+      { input: "stablecoinMomentum", weight: 0.2, low: -3, high: 8, direction: "higher" },
+    ],
+  },
+  cryptoDemand: {
+    label: "Crypto demand",
+    orientation: "demand",
+    description: "Higher readings indicate stronger BTC price and stablecoin expansion.",
+    components: [
+      { input: "btcPrice", weight: 0.45, low: 40000, high: 140000, direction: "higher" },
+      { input: "stablecoinMarketCap", weight: 0.35, low: 160, high: 260, direction: "higher" },
+      { input: "btcMomentum", weight: 0.2, low: -15, high: 20, direction: "higher" },
+    ],
+  },
+  indonesiaRisk: {
+    label: "Indonesia risk",
+    orientation: "risk",
+    description: "Higher readings indicate more external FX pressure; this is not a probability of crisis.",
+    components: [
+      { input: "usdidr", weight: 0.5, low: 14500, high: 17500, direction: "higher" },
+      { input: "dxy", weight: 0.25, low: 95, high: 112, direction: "higher" },
+      { input: "oil", weight: 0.25, low: 55, high: 115, direction: "higher" },
+    ],
+  },
+} satisfies Record<ScoreKey, ScoringDefinition>;
 
 function clamp(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function highScore(value: number, low: number, high: number): number {
-  return clamp(((value - low) / (high - low)) * 100);
-}
-
-function lowScore(value: number, low: number, high: number): number {
-  return clamp(((high - value) / (high - low)) * 100);
+function normalize(value: number, component: ScoringComponent): number {
+  const position = (value - component.low) / (component.high - component.low);
+  const score = component.direction === "higher" ? position : 1 - position;
+  return clamp(score * 100);
 }
 
 function changePercent(current: number, previous: number): number {
-  return ((current - previous) / previous) * 100;
+  return previous === 0 ? 0 : ((current - previous) / previous) * 100;
 }
 
-function average(parts: Array<[number, number]>): number {
-  return clamp(parts.reduce((total, [score, weight]) => total + score * weight, 0));
+function readingFor(orientation: ScoreOrientation, score: number): string {
+  if (orientation === "risk") {
+    return score >= 65 ? "Elevated" : score >= 40 ? "Watch" : "Contained";
+  }
+
+  if (orientation === "support") {
+    return score >= 65 ? "Strong" : score >= 40 ? "Constructive" : "Soft";
+  }
+
+  return score >= 65 ? "High demand" : score >= 40 ? "Building" : "Muted";
 }
 
-function readingFor(key: ScoreKey, score: number): string {
-  const favorable = key === "liquidity" || key === "cryptoDemand";
-
-  if (score >= 65) {
-    return favorable ? "Strong" : "Elevated";
-  }
-
-  if (score >= 40) {
-    return favorable ? "Constructive" : "Watch";
-  }
-
-  return favorable ? "Soft" : "Contained";
+function valuesFor(current: MarketSnapshot, previous: MarketSnapshot): Record<ScoringInput, number> {
+  return {
+    ...current.metrics,
+    btcMomentum: changePercent(current.metrics.btcPrice, previous.metrics.btcPrice),
+    stablecoinMomentum: changePercent(
+      current.metrics.stablecoinMarketCap,
+      previous.metrics.stablecoinMarketCap,
+    ),
+  };
 }
 
 export function calculateScores(
   current: MarketSnapshot,
   previous: MarketSnapshot,
 ): CategoryScore[] {
-  const values = current.metrics;
-  const prior = previous.metrics;
-  const btcMomentum = changePercent(values.btcPrice, prior.btcPrice);
+  const inputs = valuesFor(current, previous);
+  const scores = (Object.keys(SCORING_MODEL) as ScoreKey[]).map((key) => {
+    const definition = SCORING_MODEL[key];
+    const score = clamp(
+      definition.components.reduce(
+        (total, component) => total + normalize(inputs[component.input], component) * component.weight,
+        0,
+      ),
+    );
+
+    return {
+      key,
+      label: definition.label,
+      score,
+      orientation: definition.orientation,
+      reading: readingFor(definition.orientation, score),
+      summary: definition.description,
+    };
+  });
+
   const stablecoinMomentum = changePercent(
-    values.stablecoinMarketCap,
-    prior.stablecoinMarketCap,
+    current.metrics.stablecoinMarketCap,
+    previous.metrics.stablecoinMarketCap,
   );
-
-  const scoreValues: Record<ScoreKey, number> = {
-    inflationPressure: average([
-      [highScore(values.cpi, 1.5, 5), 0.4],
-      [highScore(values.coreCpi, 1.5, 4.5), 0.35],
-      [highScore(values.oil, 55, 115), 0.25],
-    ]),
-    growthStress: average([
-      [highScore(values.hySpread, 250, 700), 0.45],
-      [highScore(values.joblessClaims, 195, 360), 0.35],
-      [highScore(values.twoYearYield, 2.5, 5.5), 0.2],
-    ]),
-    liquidity: average([
-      [lowScore(values.dxy, 95, 110), 0.25],
-      [lowScore(values.tenYearRealYield, 0.5, 2.5), 0.25],
-      [highScore(values.stablecoinMarketCap, 160, 260), 0.3],
-      [highScore(stablecoinMomentum, -3, 8), 0.2],
-    ]),
-    cryptoDemand: average([
-      [highScore(values.btcPrice, 40000, 140000), 0.45],
-      [highScore(values.stablecoinMarketCap, 160, 260), 0.35],
-      [highScore(btcMomentum, -15, 20), 0.2],
-    ]),
-    indonesiaRisk: average([
-      [highScore(values.usdidr, 14500, 17500), 0.5],
-      [highScore(values.dxy, 95, 112), 0.25],
-      [highScore(values.oil, 55, 115), 0.25],
-    ]),
+  const btcMomentum = changePercent(current.metrics.btcPrice, previous.metrics.btcPrice);
+  const summaries: Partial<Record<ScoreKey, string>> = {
+    inflationPressure: `CPI ${current.metrics.cpi.toFixed(1)}% YoY; Brent $${current.metrics.oil.toFixed(1)} per barrel.`,
+    growthStress: `High-yield spreads ${current.metrics.hySpread} bps; initial claims ${current.metrics.joblessClaims}k.`,
+    liquidity: `Stablecoin supply ${stablecoinMomentum >= 0 ? "+" : ""}${stablecoinMomentum.toFixed(1)}% versus prior sample; real yield ${current.metrics.tenYearRealYield.toFixed(2)}%.`,
+    cryptoDemand: `BTC ${btcMomentum >= 0 ? "+" : ""}${btcMomentum.toFixed(1)}% versus prior sample; stablecoin supply $${current.metrics.stablecoinMarketCap.toFixed(1)}bn.`,
+    indonesiaRisk: `USD/IDR ${current.metrics.usdidr.toLocaleString("en-US")} with DXY ${current.metrics.dxy.toFixed(1)}.`,
   };
 
-  const summaries: Record<ScoreKey, string> = {
-    inflationPressure: `Headline CPI ${values.cpi.toFixed(1)}% and Brent $${values.oil.toFixed(1)} keep pricing pressure moderate.`,
-    growthStress: `HY spreads at ${values.hySpread} bps and claims at ${values.joblessClaims}k indicate limited credit stress.`,
-    liquidity: `Stablecoin supply is up ${stablecoinMomentum.toFixed(1)}% month-on-month while real yields sit at ${values.tenYearRealYield.toFixed(2)}%.`,
-    cryptoDemand: `BTC is up ${btcMomentum.toFixed(1)}% month-on-month with stablecoin capacity at $${values.stablecoinMarketCap.toFixed(1)}bn.`,
-    indonesiaRisk: `USDIDR at ${values.usdidr.toLocaleString("en-US")} and DXY at ${values.dxy.toFixed(1)} define external FX pressure.`,
-  };
-
-  const labels: Record<ScoreKey, string> = {
-    inflationPressure: "Inflation Pressure",
-    growthStress: "Growth Stress",
-    liquidity: "Liquidity",
-    cryptoDemand: "Crypto Demand",
-    indonesiaRisk: "Indonesia Risk",
-  };
-
-  return (Object.keys(scoreValues) as ScoreKey[]).map((key) => ({
-    key,
-    label: labels[key],
-    score: scoreValues[key],
-    reading: readingFor(key, scoreValues[key]),
-    summary: summaries[key],
+  return scores.map((score) => ({
+    ...score,
+    summary: summaries[score.key] ?? score.summary,
   }));
 }
 
@@ -178,8 +229,8 @@ export function classifyRegime(
     regime: "Goldilocks",
     confidence: clamp(72 - inflation * 0.25 - growth * 0.2 + liquidity * 0.2),
     rationale: [
-      "Inflation and growth stress lack an extreme directional signal.",
-      "A balanced risk allocation remains supported by the ruleset.",
+      "No stronger regime trigger crossed its fixed threshold in this sample.",
+      "Goldilocks is the ruleset's residual classification, not a forecast.",
     ],
   };
 }

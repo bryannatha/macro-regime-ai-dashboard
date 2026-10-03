@@ -26,10 +26,13 @@ export type ScoreKey =
   | "cryptoDemand"
   | "indonesiaRisk";
 
+export type ScoreOrientation = "risk" | "support" | "demand";
+
 export interface CategoryScore {
   key: ScoreKey;
   label: string;
   score: number;
+  orientation: ScoreOrientation;
   reading: string;
   summary: string;
 }
@@ -58,6 +61,7 @@ export interface AssetPlaybook {
 
 export interface AIReport {
   generatedAt: string;
+  dataAsOf: string;
   title: string;
   regime: Regime;
   executiveSummary: string;

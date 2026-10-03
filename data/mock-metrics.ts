@@ -178,18 +178,18 @@ export const previousSnapshot = mockMarketHistory[mockMarketHistory.length - 2];
 
 export const metricMetadata: Record<
   MetricKey,
-  { label: string; unit: string; decimals: number }
+  { label: string; unit: string; decimals: number; cadence: string }
 > = {
-  cpi: { label: "CPI", unit: "% YoY", decimals: 1 },
-  coreCpi: { label: "Core CPI", unit: "% YoY", decimals: 1 },
-  oil: { label: "Oil (Brent)", unit: "USD", decimals: 1 },
-  dxy: { label: "DXY", unit: "Index", decimals: 1 },
-  twoYearYield: { label: "2Y Yield", unit: "%", decimals: 2 },
-  tenYearRealYield: { label: "10Y Real Yield", unit: "%", decimals: 2 },
-  hySpread: { label: "HY Spread", unit: "bps", decimals: 0 },
-  joblessClaims: { label: "Jobless Claims", unit: "k", decimals: 0 },
-  btcPrice: { label: "BTC Price", unit: "USD", decimals: 0 },
-  stablecoinMarketCap: { label: "Stablecoin Market Cap", unit: "USD bn", decimals: 1 },
-  usdidr: { label: "USDIDR", unit: "IDR", decimals: 0 },
-  goldPrice: { label: "Gold Price", unit: "USD", decimals: 0 },
+  cpi: { label: "CPI", unit: "% YoY", decimals: 1, cadence: "Monthly" },
+  coreCpi: { label: "Core CPI", unit: "% YoY", decimals: 1, cadence: "Monthly" },
+  oil: { label: "Brent crude", unit: "USD / bbl", decimals: 1, cadence: "Daily" },
+  dxy: { label: "US dollar index", unit: "Index", decimals: 1, cadence: "Daily" },
+  twoYearYield: { label: "US 2Y yield", unit: "%", decimals: 2, cadence: "Daily" },
+  tenYearRealYield: { label: "US 10Y real yield", unit: "%", decimals: 2, cadence: "Daily" },
+  hySpread: { label: "High-yield spread", unit: "bps", decimals: 0, cadence: "Daily" },
+  joblessClaims: { label: "Initial claims", unit: "k", decimals: 0, cadence: "Weekly" },
+  btcPrice: { label: "Bitcoin", unit: "USD", decimals: 0, cadence: "Daily" },
+  stablecoinMarketCap: { label: "Stablecoin cap", unit: "USD bn", decimals: 1, cadence: "Daily" },
+  usdidr: { label: "USD / IDR", unit: "IDR", decimals: 0, cadence: "Daily" },
+  goldPrice: { label: "Gold", unit: "USD / oz", decimals: 0, cadence: "Daily" },
 };

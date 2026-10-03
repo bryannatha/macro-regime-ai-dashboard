@@ -1,11 +1,22 @@
 # Macro Regime AI Dashboard
 
-A Next.js 15 App Router dashboard for exploring macro regimes from mock market data. It combines
-rules-based macro scoring, a six-regime classifier, a regime-specific asset playbook, and a mocked
-daily AI report endpoint.
+A Next.js 15 App Router research dashboard that scores macro signals across inflation, growth
+stress, liquidity, crypto demand, and Indonesia FX risk. The current deployment is a static demo;
+it does not connect to live market feeds.
 
 This project is an educational research dashboard only. It is not financial advice, investment
 advice, trading advice, or a recommendation to buy, sell, hold, or short any asset.
+
+## Included
+
+- Local mock time-series data for CPI, Core CPI, Oil, DXY, yields, spreads, claims, BTC,
+  stablecoins, USDIDR, and gold.
+- Deterministic category scoring in `lib/scoring.ts`, with weights, scaling ranges, and score direction exposed to the UI.
+- Six-state regime classification, with heuristic confidence explicitly labeled as uncalibrated.
+- Asset playbook mapping in `lib/playbook.ts`.
+- Rules-generated sample brief endpoint at `GET /api/ai-report`.
+- Responsive monitoring workspace with Overview, Signals & Data, and Methodology views.
+- Sample cadence labels and explicit sample observation date.
 
 ## Project Links
 

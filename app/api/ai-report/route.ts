@@ -13,19 +13,20 @@ export function GET() {
 
   const report: AIReport = {
     generatedAt: new Date().toISOString(),
-    title: `Daily Regime Brief: ${assessment.regime}`,
+    dataAsOf: latestSnapshot.date,
+    title: `Rules Brief: ${assessment.regime}`,
     regime: assessment.regime,
     executiveSummary: `${assessment.rationale[0]} ${playbook.thesis} This narrative is generated from mock observations and deterministic scoring rules.`,
     signals: highestSignals.map(
       (signal) => `${signal.label}: ${signal.score}/100 (${signal.reading}) - ${signal.summary}`,
     ),
     watchlist: [
-      `Monitor USDIDR above ${latestSnapshot.metrics.usdidr.toLocaleString("en-US")} for renewed Indonesia FX pressure.`,
-      `Watch stablecoin market cap near $${latestSnapshot.metrics.stablecoinMarketCap.toFixed(1)}bn as a liquidity confirmation signal.`,
-      `Track Brent oil above $85 as a trigger for commodity-inflation risk.`,
+      `Review USD/IDR if it moves materially above the ${latestSnapshot.metrics.usdidr.toLocaleString("en-US")} demo reference.`,
+      `Compare stablecoin supply with the $${latestSnapshot.metrics.stablecoinMarketCap.toFixed(1)}bn demo reference before treating liquidity as confirmed.`,
+      "Brent above $85 is a ruleset watch level, not a forecast or trade trigger.",
     ],
     riskNote:
-      "This mocked AI report is a research summary only. It does not provide investment recommendations or trade execution.",
+      "Synthetic sample data; the report is rules-generated, not AI-generated. Research context only, not investment advice.",
     source: "mock",
   };
 
