@@ -1,3 +1,4 @@
+import { parse } from "csv-parse/sync";
 import { strFromU8, unzipSync } from "fflate";
 import { parseFiniteNumber, parseIsoDate, parseXmlWithAttributes } from "@/lib/market-data/parsers";
 import {
@@ -12,6 +13,7 @@ const h41Endpoint = "https://www.federalreserve.gov/releases/h41/current/";
 const h6ArchiveEndpoint = "https://www.federalreserve.gov/releases/h6/data/FRB_h6_xml.zip";
 const sloosIndexEndpoint = "https://www.federalreserve.gov/data/sloos.htm";
 const h8Endpoint = "https://www.federalreserve.gov/releases/h8/current/default.htm";
+const h8DdpChooseEndpoint = "https://www.federalreserve.gov/datadownload/choose.aspx?rel=H8";
 const creditPerformanceArchiveEndpoint = "https://www.federalreserve.gov/releases/chargeoff/data/FRB_CHGDEL_xml.zip";
 
 const sourceIds = {
@@ -32,7 +34,7 @@ export const FEDERAL_RESERVE_SUPPORT_IDENTIFIERS = {
   h6M2: "M2.M",
   sloosLargeMedium: "Figure 1 Panel 1 / Large and medium",
   sloosSmall: "Figure 1 Panel 1 / Small",
-  h8Loans: "H.8 Table 2 line 9 / Loans and leases in bank credit",
+  h8Loans: "H8/H8/B1020NCBA",
   delinquency: "STFBQD%STFBAIL_XEOP_MA.Q",
   chargeOff: "STFBQC%STFBAIL_MA.Q",
 } as const;
@@ -407,6 +409,78 @@ export function parseFederalReserveH8Loans(html: string, retrievedAt: string): C
   return available(spec, last17.map(({ date, value }) => observation(spec.sourceId, spec.identifier, value, "billions USD", "SA", date, retrievedAt, releasedAt)), retrievedAt);
 }
 
+function latestH8DdpCsvUrl(html: string): string | null {
+  const options = Array.from(html.matchAll(/<option\b([^>]*)>([\s\S]*?)<\/option>/gi));
+  const matching = options.filter((option) => /^All Commercial Banks, SA \(Weekly\)/i.test(htmlText(option[2])));
+  if (matching.length !== 1) return null;
+  const value = /\bvalue=["']([^"']+)["']/i.exec(matching[0][1])?.[1];
+  if (!value) return null;
+  const params = new URLSearchParams(value.replace(/&amp;/gi, "&"));
+  if (params.get("rel")?.toUpperCase() !== "H8" || params.get("filetype") !== "csv" ||
+      params.get("layout") !== "seriescolumn" || params.get("type") !== "package" ||
+      !/^[a-f0-9]{32}$/i.test(params.get("series") ?? "")) return null;
+  const url = new URL("Output.aspx", h8DdpChooseEndpoint);
+  url.search = params.toString();
+  return url.toString();
+}
+
+export function parseFederalReserveH8DdpCsv(
+  csv: string,
+  retrievedAt: string,
+  releaseHtml = "",
+): CoreObservationSeriesResult {
+  const spec = { sourceId: sourceIds.h8, identifier: FEDERAL_RESERVE_SUPPORT_IDENTIFIERS.h8Loans };
+  if (typeof csv !== "string" || !validRetrievedAt(retrievedAt)) {
+    return unavailable(spec, null, "FAILED", "The official H.8 DDP CSV or retrieval timestamp was invalid.");
+  }
+
+  try {
+    const rows = parse(csv, { bom: true, skip_empty_lines: true, trim: true }) as string[][];
+    const metadataLabels = ["Series Description", "Unit:", "Multiplier:", "Currency:", "Unique Identifier:", "Time Period"];
+    if (rows.length < 7 || metadataLabels.some((label, index) => rows[index]?.[0] !== label) ||
+        rows.some((row) => row.length !== rows[0].length)) {
+      return unavailable(spec, retrievedAt, "FAILED", "The H.8 DDP CSV metadata or row widths did not match the registered format.");
+    }
+
+    const targetIdentifier = FEDERAL_RESERVE_SUPPORT_IDENTIFIERS.h8Loans;
+    const candidates = rows[4].flatMap((value, index) => value === targetIdentifier ? [index] : []);
+    if (candidates.length !== 1) return unavailable(spec, retrievedAt, "FAILED", "The H.8 DDP CSV did not contain one exact all-bank SA loans series.");
+    const column = candidates[0];
+    const exactMetadata = rows[0][column] === "Loans and leases in bank credit, all commercial banks, seasonally adjusted" &&
+      rows[1][column] === "Currency" && rows[2][column] === "1000000" && rows[3][column] === "USD" &&
+      rows[5][column] === "B1020NCBA";
+    if (!exactMetadata) return unavailable(spec, retrievedAt, "FAILED", "The H.8 DDP series did not match the approved SA USD-million metadata.");
+
+    const points = rows.slice(6).map((row) => ({
+      date: parseIsoDate(row[0]),
+      value: parseFiniteNumber(row[column]),
+    }));
+    if (points.some(({ date, value }) => date === null || value === null || value <= 0)) {
+      return unavailable(spec, retrievedAt, "FAILED", "The H.8 DDP weekly observations contained invalid dates or balances.");
+    }
+    const sorted = points.map(({ date, value }) => ({ date: date!, value: value! / 1000 }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+    if (sorted.length < 17 || sorted.some((item, index) => index > 0 && item.date === sorted[index - 1].date)) {
+      return unavailable(spec, retrievedAt, "MISSING", "The H.8 DDP history had fewer than 17 observations or duplicate weeks.");
+    }
+    if (sorted.some((item, index) => index > 0 && Date.parse(item.date) - Date.parse(sorted[index - 1].date) !== 7 * 86_400_000)) {
+      return unavailable(spec, retrievedAt, "MISSING", "The H.8 DDP history did not contain continuous weekly observations.");
+    }
+
+    const firstRecentDate = sorted.at(-17)!.date;
+    const lastRecentDate = sorted.at(-1)!.date;
+    const eligibilityBlockReason = recentReclassificationBreak(releaseHtml, firstRecentDate, lastRecentDate)
+      ? "The H.8 credit-volume comparison window crosses a disclosed reclassification break."
+      : null;
+    const observations = sorted.map(({ date, value }) => observation(
+      spec.sourceId, spec.identifier, value, "billions USD", "SA", date, retrievedAt,
+    ));
+    return { ...available(spec, observations, retrievedAt), eligibilityBlockReason };
+  } catch {
+    return unavailable(spec, retrievedAt, "FAILED", "The official H.8 DDP CSV could not be parsed.");
+  }
+}
+
 const creditSeries = [
   { identifier: FEDERAL_RESERVE_SUPPORT_IDENTIFIERS.delinquency, label: "delinquency", unit: "percent" },
   { identifier: FEDERAL_RESERVE_SUPPORT_IDENTIFIERS.chargeOff, label: "net charge-offs", unit: "percent" },
@@ -510,7 +584,14 @@ export async function fetchFederalReserveH8Loans(options: AdapterOptions = {}): 
   const spec = { sourceId: sourceIds.h8, identifier: FEDERAL_RESERVE_SUPPORT_IDENTIFIERS.h8Loans };
   const retrievedAt = fetchedAtFrom(options.now ?? new Date());
   try {
-    return parseFederalReserveH8Loans(await responseText(h8Endpoint, options, 21_600), retrievedAt);
+    const [releaseHtml, chooserHtml] = await Promise.all([
+      responseText(h8Endpoint, options, 21_600),
+      responseText(h8DdpChooseEndpoint, options, 21_600),
+    ]);
+    const csvUrl = latestH8DdpCsvUrl(chooserHtml);
+    if (!csvUrl) return unavailable(spec, retrievedAt, "FAILED", "The official H.8 DDP page did not identify its all-bank SA weekly package.");
+    const csv = await responseText(csvUrl, options, 21_600);
+    return parseFederalReserveH8DdpCsv(csv, retrievedAt, releaseHtml);
   } catch {
     return unavailable(spec, null, "FAILED", "The official H.8 release was unavailable.");
   }

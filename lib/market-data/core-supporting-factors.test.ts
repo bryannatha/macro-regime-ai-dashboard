@@ -3,9 +3,11 @@ import type { CoreObservationSeriesResult, CoreSourceObservation } from "./types
 import {
   parseFederalReserveCreditPerformanceXml,
   parseFederalReserveH41Liquidity,
+  parseFederalReserveH8DdpCsv,
   parseFederalReserveH6M2Xml,
   parseFederalReserveH8Loans,
   parseFederalReserveSloosChartData,
+  fetchFederalReserveH8Loans,
 } from "./providers/federal-reserve-core";
 import {
   transformCreditStandards,
@@ -89,6 +91,22 @@ function sdmxObservations(periods: string[], values: number[]): string {
   return periods.map((period, index) => `<generic:Obs><generic:ObsDimension value="${period}"/><generic:ObsValue value="${values[index]}"/></generic:Obs>`).join("");
 }
 
+function h8DdpCsv(periods = dates("2026-01-07", 17, 7)): string {
+  const rows = [
+    ["Series Description", "Bank credit, all commercial banks, seasonally adjusted", "Loans and leases in bank credit, all commercial banks, seasonally adjusted"],
+    ["Unit:", "Currency", "Currency"],
+    ["Multiplier:", "1000000", "1000000"],
+    ["Currency:", "USD", "USD"],
+    ["Unique Identifier:", "H8/H8/B1001NCBA", "H8/H8/B1020NCBA"],
+    ["Time Period", "B1001NCBA", "B1020NCBA"],
+    ...periods.map((date, index) => [date, String(19_000_000 + index * 1000), String(14_000_000 + index * 1000)]),
+  ];
+  return rows.map((row) => row.map((cell) => `"${cell}"`).join(",")).join("\r\n");
+}
+
+const h8DdpChooser = `<select><option value="rel=H8&amp;series=17951c643555bee48d63bb6957a4a92e&amp;lastobs=&amp;from=&amp;to=&amp;filetype=csv&amp;label=include&amp;layout=seriescolumn&amp;type=package">All Commercial Banks, SA (Weekly) [csv, All Observations, 757.0 KB]</option></select>`;
+const h8ReleaseWithBreak = `<h2>Release Date: October 2, 2026</h2><p>As of the week ending July 1, 2026, foreign-related institutions reclassified $6.1 billion.</p>`;
+
 const sloosHtml = `<h3>Figure 1: Measures of Supply and Demand for C&amp;I Loans by Size of Firm Seeking Loans</h3>
 <table><thead>
 <tr><th>Period</th><th colspan="2">Panel 1: Net Percentage of Domestic Respondents Tightening Standards for C&amp;I Loans</th><th colspan="2">Panel 2: Other measure</th></tr>
@@ -156,8 +174,44 @@ describe("approved supporting source parsers", () => {
       <table><tr><th>Account</th>${dates.map((date) => `<th>Week ending ${date}</th>`).join("")}</tr>
       <tr><td>9</td><td>Loans and leases in bank credit</td>${[14_000, 14_010, 14_020, 14_030].map((value) => `<td>${value}</td>`).join("")}</tr></table>`;
     const parsed = parseFederalReserveH8Loans(html, retrievedAt);
-    expect(parsed).toMatchObject({ sourceId: h8Source, identifier: "H.8 Table 2 line 9 / Loans and leases in bank credit", state: "MISSING", observations: [] });
+    expect(parsed).toMatchObject({ sourceId: h8Source, identifier: identifiers.h8Loans, state: "MISSING", observations: [] });
     expect(parsed.reason).toContain("17 consecutive weekly observations");
+  });
+
+  it("parses the exact H.8 DDP weekly SA series and normalizes millions to billions", () => {
+    const parsed = parseFederalReserveH8DdpCsv(h8DdpCsv(), retrievedAt);
+
+    expect(parsed).toMatchObject({ sourceId: h8Source, identifier: "H8/H8/B1020NCBA", state: "AVAILABLE", parserStatus: "VERIFIED" });
+    expect(parsed.observations).toHaveLength(17);
+    expect(parsed.observations.at(-1)).toMatchObject({ value: 14_016, unit: "billions USD", seasonalBasis: "SA", observedAt: "2026-04-29" });
+  });
+
+  it("rejects H.8 DDP files without the exact source series or USD million metadata", () => {
+    const csv = h8DdpCsv();
+
+    expect(parseFederalReserveH8DdpCsv(csv.replace("H8/H8/B1020NCBA", "H8/H8/B1020NCBD"), retrievedAt).state).toBe("FAILED");
+    expect(parseFederalReserveH8DdpCsv(csv.replace('"Multiplier:","1000000","1000000"', '"Multiplier:","1000000","1000"'), retrievedAt).state).toBe("FAILED");
+  });
+
+  it("discovers the official H.8 DDP package but withholds a window crossing its disclosed break", async () => {
+    const requests: string[] = [];
+    const result = await fetchFederalReserveH8Loans({
+      now: new Date(retrievedAt),
+      fetchImpl: async (input) => {
+        const url = String(input);
+        requests.push(url);
+        if (url.includes("/releases/h8/current/default.htm")) return new Response(h8ReleaseWithBreak, { status: 200 });
+        if (url.includes("/datadownload/choose.aspx?rel=H8")) return new Response(h8DdpChooser, { status: 200 });
+        return new Response(h8DdpCsv(dates("2026-06-03", 17, 7)), { status: 200 });
+      },
+    });
+
+    expect(requests).toHaveLength(3);
+    expect(requests[2]).toContain("Output.aspx?rel=H8&series=17951c643555bee48d63bb6957a4a92e");
+    expect(result).toMatchObject({ identifier: "H8/H8/B1020NCBA", state: "AVAILABLE", observations: expect.any(Array) });
+    expect(result.observations).toHaveLength(17);
+    expect(result.eligibilityBlockReason).toContain("reclassification break");
+    expect(transformCreditVolume(result)).toMatchObject({ value: null, reason: expect.stringContaining("reclassification break") });
   });
 
   it("rejects missing or ambiguous credit-performance series instead of guessing the rate", () => {
@@ -191,7 +245,7 @@ describe("approved supporting transforms", () => {
 
   it("annualizes the change between four-week H.8 means 13 weeks apart", () => {
     const points = [100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 100, 102, 102, 102, 102];
-    const data = series(h8Source, "H.8 Table 2 line 9 / Loans and leases in bank credit", points, dates("2026-06-03", 17, 7), "billions USD", "SA");
+    const data = series(h8Source, identifiers.h8Loans, points, dates("2026-06-03", 17, 7), "billions USD", "SA");
     const metric = transformCreditVolume(data);
 
     expect(metric.value).toBeCloseTo((1.02 ** 4 - 1) * 100, 8);

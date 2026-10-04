@@ -16,6 +16,7 @@ export {
   parseFederalReserveCreditPerformanceXml,
   parseFederalReserveH41Liquidity,
   parseFederalReserveH6M2Xml,
+  parseFederalReserveH8DdpCsv,
   parseFederalReserveH8Loans,
   parseFederalReserveSloosChartData,
 } from "./federal-reserve-support";

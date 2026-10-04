@@ -281,11 +281,12 @@ export function transformCreditVolume(
 ): CoreTransformResult {
   const expectation: SeriesExpectation = {
     sourceId: "federal-reserve-h8",
-    identifier: "H.8 Table 2 line 9 / Loans and leases in bank credit",
+    identifier: "H8/H8/B1020NCBA",
     unit: "billions USD",
     seasonalBasis: "SA",
     cadence: "weekly",
   };
+  if (series?.eligibilityBlockReason) return unavailable(series.eligibilityBlockReason, "percent annualized");
   const validated = validateSeries(series, expectation);
   if (!validated) return unavailable("The H.8 series, units, seasonal basis, or weekly continuity did not match.", "percent annualized");
   const { observations, points } = validated;

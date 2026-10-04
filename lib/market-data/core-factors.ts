@@ -46,7 +46,7 @@ const H41_RRP_OTHERS: SeriesExpectation = { sourceId: "federal-reserve-h41-liqui
 const H6_M2: SeriesExpectation = { sourceId: "federal-reserve-h6-m2", identifier: "M2.M", unit: "billions USD", seasonalBasis: "SA", cadence: "monthly" };
 const SLOOS_LARGE_MEDIUM = "Figure 1 Panel 1 / Large and medium";
 const SLOOS_SMALL = "Figure 1 Panel 1 / Small";
-const H8_LOANS: SeriesExpectation = { sourceId: "federal-reserve-h8", identifier: "H.8 Table 2 line 9 / Loans and leases in bank credit", unit: "billions USD", seasonalBasis: "SA", cadence: "weekly" };
+const H8_LOANS: SeriesExpectation = { sourceId: "federal-reserve-h8", identifier: "H8/H8/B1020NCBA", unit: "billions USD", seasonalBasis: "SA", cadence: "weekly" };
 const DELINQUENCY: SeriesExpectation = { sourceId: "federal-reserve-credit-performance", identifier: "STFBQD%STFBAIL_XEOP_MA.Q", unit: "percent", seasonalBasis: "SA", cadence: "quarterly" };
 const CHARGE_OFF: SeriesExpectation = { sourceId: "federal-reserve-credit-performance", identifier: "STFBQC%STFBAIL_MA.Q", unit: "percent", seasonalBasis: "SA", cadence: "quarterly" };
 
