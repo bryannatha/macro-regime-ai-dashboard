@@ -9,6 +9,7 @@ import { evaluateRegime } from "@/lib/regime";
 import { calculateScores } from "@/lib/scoring";
 import { createUnavailableObservation } from "./parsers";
 import type { AdapterOptions } from "./types";
+import { getSourceRegistry } from "./source-registry";
 import { fetchBlsCpi } from "./providers/bls";
 import { fetchDolClaims } from "./providers/dol";
 import { fetchEiaBrent } from "./providers/eia";
@@ -197,6 +198,7 @@ export async function getDashboardPayload(options: DashboardOptions = {}): Promi
   return {
     generatedAt,
     dataAsOf: dates.sort().at(-1) ?? null,
+    sourceRegistry: getSourceRegistry(),
     observations,
     scores,
     regime,

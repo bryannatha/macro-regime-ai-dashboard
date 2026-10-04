@@ -32,6 +32,7 @@ function dashboard(regime: RegimeAssessment = emptyRegime): DashboardPayload {
   return {
     generatedAt: "2026-10-03T12:00:00.000Z",
     dataAsOf: "2026-10-02",
+    sourceRegistry: [],
     observations: {
       cpi: { value: 3, status: "available", label: "CPI", observedAt: "2026-09-01", source: "BLS", detail: "", unit: "% YoY", key: "cpi", sourceUrl: null, fetchedAt: "2026-10-03T12:00:00.000Z", cadence: "Monthly", history: [] },
       oil: { value: null, status: "unavailable", label: "Brent crude", observedAt: null, source: "EIA", detail: "EIA_API_KEY is not configured", unit: "USD / barrel", key: "oil", sourceUrl: null, fetchedAt: "2026-10-03T12:00:00.000Z", cadence: "Daily", history: [] },

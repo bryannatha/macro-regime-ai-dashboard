@@ -89,6 +89,7 @@ function payload(): DashboardPayload {
   return {
     generatedAt: "2026-10-03T12:00:00.000Z",
     dataAsOf: "2026-10-02",
+    sourceRegistry: [],
     observations: Object.fromEntries(keys.map((key) => [key, makeObservation(key)])) as DashboardPayload["observations"],
     scores,
     regime: evaluateRegime(createUnconfiguredRegimeInputs()),

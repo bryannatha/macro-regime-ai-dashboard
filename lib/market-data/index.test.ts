@@ -58,6 +58,10 @@ describe("getDashboardPayload", () => {
     });
     expect(payload.researchImplications).toBeNull();
     expect(Object.values(payload.regime.factorReadiness).every((factor) => !factor.classifiable)).toBe(true);
+    expect(payload.sourceRegistry.find((entry) => entry.id === "treasury-real-yield")).toMatchObject({
+      sourceHealth: "REDISTRIBUTION_BLOCKED",
+      reuseStatus: "UNRESOLVED",
+    });
     expect(JSON.stringify(payload)).not.toContain("fixture-secret-not-real");
   });
 

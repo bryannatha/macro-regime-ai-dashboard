@@ -1,3 +1,47 @@
+export const SOURCE_STATES = [
+  "AVAILABLE",
+  "STALE",
+  "MISSING",
+  "FAILED",
+  "REDISTRIBUTION_BLOCKED",
+] as const;
+
+export type SourceState = (typeof SOURCE_STATES)[number];
+export type SourceReuseStatus = "CLEARED" | "CONDITIONAL" | "UNRESOLVED" | "BLOCKED";
+export type SourceParserStatus = "UNVERIFIED" | "PARTIAL" | "VERIFIED" | "FAILED";
+export type SourceHistoryStatus = "UNVERIFIED" | "PARTIAL" | "VERIFIED" | "FAILED";
+export type CoreSourceCadence = "daily" | "weekly" | "monthly" | "quarterly";
+
+export interface SourceFamilyAllocation {
+  factor: RegimeFactorKey;
+  family: string;
+  weight: number;
+}
+
+export interface SourceRegistryEntry {
+  id: string;
+  name: string;
+  owner: string;
+  endpoint: string;
+  identifiers: string[];
+  accessMethod: string;
+  reuseStatus: SourceReuseStatus;
+  reuseEvidenceUrl: string | null;
+  reuseReviewUrl: string;
+  attribution: string;
+  cadence: CoreSourceCadence;
+  firstUsablePeriod: string | null;
+  units: string[];
+  seasonalBases: string[];
+  expectedReleaseSchedule: string;
+  releaseDateQuality: number | null;
+  sourceHealth: SourceState;
+  parserStatus: SourceParserStatus;
+  historyStatus: SourceHistoryStatus;
+  verifiedAt: string | null;
+  familyAllocations: SourceFamilyAllocation[];
+}
+
 export type ObservationKey =
   | "cpi"
   | "coreCpi"
@@ -182,6 +226,7 @@ export interface ResearchImplications {
 export interface DashboardPayload {
   generatedAt: string;
   dataAsOf: string | null;
+  sourceRegistry: SourceRegistryEntry[];
   observations: ObservationMap;
   scores: CategoryScore[];
   regime: RegimeAssessment;

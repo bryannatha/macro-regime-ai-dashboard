@@ -1,3 +1,7 @@
+import type { QualitySlotInput, SourceState } from "@/lib/types";
+
+export type { SourceRegistryEntry, SourceState } from "@/lib/types";
+
 export interface AdapterOptions {
   fetchImpl?: typeof fetch;
   now?: Date;
@@ -17,3 +21,70 @@ export function cachedFetchOptions(revalidate: number, init: RequestInit = {}): 
     next: { revalidate },
   } as RequestInit;
 }
+
+export interface CoreSourceObservation {
+  sourceId: string;
+  identifier: string;
+  value: number;
+  unit: string;
+  seasonalBasis: string;
+  observedAt: string;
+  releasedAt: string | null;
+  retrievedAt: string;
+  firstSeenAt: string | null;
+  releaseDateQuality: number;
+  version: string | null;
+  vintage: string | null;
+}
+
+export interface ValidatedObservationCacheEntry {
+  observation: CoreSourceObservation;
+  validatedAt: string;
+  validationVersion: string;
+}
+
+export type SourceFetchAttempt =
+  | { status: "SUCCEEDED"; attemptedAt: string; observation: CoreSourceObservation }
+  | { status: "FAILED"; attemptedAt: string; error: string }
+  | { status: "NOT_ATTEMPTED"; attemptedAt: null };
+
+export interface FreshnessWindow {
+  expectedPublicationAt: string | null;
+  overdueGraceEndsAt: string | null;
+  fallbackAgeCeilingDays: number;
+}
+
+export interface SourceHealthMetadata {
+  sourceId: string;
+  state: SourceState;
+  lastFetchAttemptAt: string | null;
+  lastSuccessfulFetchAt: string | null;
+  lastFetchError: string | null;
+}
+
+export interface ResolvedSourceObservation {
+  state: SourceState;
+  eligible: boolean;
+  observation: CoreSourceObservation | null;
+  fetchHealth: number;
+  freshness: number;
+  lastFetchAttemptAt: string | null;
+  lastFetchError: string | null;
+  health: SourceHealthMetadata;
+  reason: string | null;
+}
+
+export interface ResolveSourceObservationOptions {
+  now: Date;
+  fetchAttempt: SourceFetchAttempt;
+  cache: ValidatedObservationCacheEntry | null;
+  freshnessWindow: FreshnessWindow;
+}
+
+export interface QualitySlotMetadata {
+  weight: number;
+  history: number;
+  release?: number;
+}
+
+export type ResolvedQualitySlot = QualitySlotInput;
