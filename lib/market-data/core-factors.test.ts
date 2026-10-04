@@ -121,6 +121,23 @@ describe("approved anchor family aggregation", () => {
     expect(income.dependencyIds).toContain("bea-pce-income:section2-revisions");
   });
 
+  it("uses revised historical observations without backdating their release or retrieval timestamps", () => {
+    const result = buildCoreFactors(sourceFixture(), "2020-01-31T23:59:59.999Z", {
+      mode: "current-revised-history",
+    });
+    const cpi = result.momentum.cpiCoreAnnualized3m;
+    const latest = cpi.observations.at(-1);
+
+    expect(result.factors.inflation.coverage).toBe(1);
+    expect(latest).toMatchObject({
+      observedAt: "2020-01-01",
+      releasedAt: "2026-10-01",
+      retrievedAt: "2026-10-04T12:00:00.000Z",
+    });
+    expect(cpi.observations.every(({ observedAt }) => observedAt <= "2020-01-31")).toBe(true);
+    expect(buildCoreFactors(sourceFixture(), "2020-01-31T23:59:59.999Z").factors.inflation.coverage).toBe(0);
+  });
+
   it("retains 100% Labor coverage with claims and exactly 75% when claims alone are absent", () => {
     const sources = sourceFixture();
     const complete = buildCoreFactors(sources, asOf).factors.labor;

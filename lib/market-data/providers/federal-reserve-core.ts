@@ -246,7 +246,7 @@ export function parseFederalReservePolicyActions(
 export async function fetchFederalReserveIndustrialProduction(options: AdapterOptions = {}): Promise<CoreObservationSeriesResult> {
   const retrievedAt = fetchedAtFrom(options.now ?? new Date());
   try {
-    const response = await (options.fetchImpl ?? fetch)(industrialProductionEndpoint, cachedFetchOptions(21600));
+    const response = await (options.fetchImpl ?? fetch)(industrialProductionEndpoint, { cache: "no-store" });
     if (!response.ok) return unavailable("federal-reserve-g17-ip", "B50001", null, "FAILED", "The G.17 source returned an unsuccessful response.");
     return parseFederalReserveIndustrialProduction(await response.text(), retrievedAt);
   } catch {

@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import type { ObservationKey } from "@/lib/types";
+import type { CoreObservationSeriesResult, CoreSourceObservation } from "./types";
 import { getDashboardPayload } from "./index";
 
 const generatedAt = "2026-10-03T12:00:00.000Z";
@@ -30,6 +31,46 @@ function fixtureFetch(fail?: (url: URL) => boolean): typeof fetch {
     if (url.hostname === "api.frankfurter.dev") return Response.json(jsonFixture("frankfurter.json"));
     return new Response("unexpected fixture URL", { status: 404 });
   }) as typeof fetch;
+}
+
+function inflationCoreSeries(
+  sourceId: string,
+  identifier: string,
+  unit: string,
+  seasonalBasis: string,
+  startYear = 2025,
+  startMonth = 8,
+): CoreObservationSeriesResult {
+  const retrievedAt = generatedAt;
+  const observations: CoreSourceObservation[] = Array.from({ length: 14 }, (_, index) => {
+    const serial = startYear * 12 + startMonth - 1 + index;
+    const year = Math.floor(serial / 12);
+    const month = (serial % 12) + 1;
+    return {
+      sourceId,
+      identifier,
+      value: 100 + index,
+      unit,
+      seasonalBasis,
+      observedAt: String(year) + "-" + String(month).padStart(2, "0") + "-01",
+      releasedAt: "2026-10-01",
+      retrievedAt,
+      firstSeenAt: null,
+      releaseDateQuality: 0.8,
+      version: null,
+      vintage: null,
+    };
+  });
+  return {
+    sourceId,
+    identifier,
+    state: "AVAILABLE",
+    observations,
+    parserStatus: "VERIFIED",
+    historyStatus: "VERIFIED",
+    retrievedAt,
+    reason: null,
+  };
 }
 
 describe("getDashboardPayload", () => {
@@ -68,6 +109,168 @@ describe("getDashboardPayload", () => {
       reuseStatus: "UNRESOLVED",
     });
     expect(JSON.stringify(payload)).not.toContain("fixture-secret-not-real");
+  });
+
+  it("feeds registered core history to factor readiness without promoting monitoring proxies into the classifier", async () => {
+    let coreLoadCount = 0;
+    const payload = await getDashboardPayload({
+      fetchImpl: fixtureFetch(),
+      now,
+      loadCoreSources: async () => {
+        coreLoadCount += 1;
+        return [
+          inflationCoreSeries("bls-cpi", "CUUR0000SA0L1E", "index (1982-84=100)", "NSA"),
+          inflationCoreSeries("bea-pce-income", "T20804-M / DPCCRG", "index (2017=100)", "SA"),
+        ];
+      },
+    });
+
+    expect(coreLoadCount).toBe(1);
+    expect(payload.regime.factorReadiness.inflation).toMatchObject({
+      coverage: 0.7,
+      eligibleFamilies: 2,
+      classifiable: true,
+    });
+    expect(payload.regime.factorReadiness.growth.classifiable).toBe(false);
+    expect(payload.regime).toMatchObject({ assessmentStatus: "INSUFFICIENT_DATA", regime: null });
+    expect(payload.regime.reasonCodes).toContain("POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED");
+    expect(payload.scores).toHaveLength(5);
+    expect(payload.sourceRegistry.find((source) => source.id === "bls-cpi")).toMatchObject({
+      sourceHealth: "AVAILABLE",
+      parserStatus: "PARTIAL",
+      observedAt: "2026-09-01",
+      releasedAt: "2026-10-01",
+      retrievedAt: generatedAt,
+    });
+    expect(payload.sourceRegistry.find((source) => source.id === "bls-cpi")?.healthReason).toContain("1 of 4");
+  });
+
+  it("loads the registered core adapters on the default dashboard service path", async () => {
+    const fetchImpl = fixtureFetch();
+    await getDashboardPayload({ fetchImpl, now, eiaApiKey: "" });
+    const requestedUrls = vi.mocked(fetchImpl).mock.calls.map(([input]) => String(input));
+
+    expect(requestedUrls.some((url) => url.startsWith("https://apps.bea.gov/"))).toBe(true);
+  });
+
+  it("does not treat recently retrieved but old reference periods as fresh core inputs", async () => {
+    const payload = await getDashboardPayload({
+      fetchImpl: fixtureFetch(),
+      now,
+      loadCoreSources: async () => [
+        inflationCoreSeries("bls-cpi", "CUUR0000SA0L1E", "index (1982-84=100)", "NSA", 2024, 1),
+        inflationCoreSeries("bea-pce-income", "T20804-M / DPCCRG", "index (2017=100)", "SA", 2024, 1),
+      ],
+    });
+
+    expect(payload.regime.factorReadiness.inflation).toMatchObject({
+      coverage: 0,
+      eligibleFamilies: 0,
+      classifiable: false,
+      status: "WITHHELD",
+    });
+    expect(payload.sourceRegistry.find((source) => source.id === "bls-cpi")).toMatchObject({
+      sourceHealth: "STALE",
+      observedAt: "2025-02-01",
+    });
+  });
+
+  it("does not present a failed fetch attempt as a successful retrieval date", async () => {
+    const payload = await getDashboardPayload({
+      fetchImpl: fixtureFetch(),
+      now,
+      loadCoreSources: async () => [{
+        sourceId: "bls-cpi",
+        identifier: "CUUR0000SA0L1E",
+        state: "FAILED",
+        observations: [],
+        parserStatus: "FAILED",
+        historyStatus: "FAILED",
+        retrievedAt: generatedAt,
+        reason: "The source request failed.",
+      }],
+    });
+
+    expect(payload.sourceRegistry.find((source) => source.id === "bls-cpi")).toMatchObject({
+      sourceHealth: "FAILED",
+      observedAt: null,
+      releasedAt: null,
+      retrievedAt: null,
+    });
+  });
+
+  it("measures quarterly freshness from the end of the reference quarter", async () => {
+    const retrievedAt = generatedAt;
+    const payload = await getDashboardPayload({
+      fetchImpl: fixtureFetch(),
+      now,
+      loadCoreSources: async () => [{
+        sourceId: "bea-gdp",
+        identifier: "T10101-Q / A191RL",
+        state: "AVAILABLE",
+        observations: [{
+          sourceId: "bea-gdp",
+          identifier: "T10101-Q / A191RL",
+          value: 2.1,
+          unit: "percent SAAR",
+          seasonalBasis: "SAAR",
+          observedAt: "2026-04-01",
+          releasedAt: "2026-09-25",
+          retrievedAt,
+          firstSeenAt: null,
+          releaseDateQuality: 0.8,
+          version: null,
+          vintage: null,
+        }],
+        parserStatus: "VERIFIED",
+        historyStatus: "VERIFIED",
+        retrievedAt,
+        reason: null,
+      }],
+    });
+
+    expect(payload.sourceRegistry.find((source) => source.id === "bea-gdp")).toMatchObject({
+      sourceHealth: "AVAILABLE",
+      observedAt: "2026-04-01",
+    });
+  });
+
+  it("keeps the latest Federal Reserve policy action current until a new action supersedes it", async () => {
+    const retrievedAt = generatedAt;
+    const payload = await getDashboardPayload({
+      fetchImpl: fixtureFetch(),
+      now,
+      loadCoreSources: async () => [{
+        sourceId: "federal-reserve-policy-actions",
+        identifier: "FOMC target range/action history",
+        state: "AVAILABLE",
+        observations: [{
+          sourceId: "federal-reserve-policy-actions",
+          identifier: "FOMC target range/action history",
+          value: 3.875,
+          unit: "percent",
+          seasonalBasis: "Not seasonally adjusted",
+          observedAt: "2026-08-01",
+          releasedAt: null,
+          retrievedAt,
+          firstSeenAt: null,
+          releaseDateQuality: 0,
+          version: null,
+          vintage: null,
+        }],
+        parserStatus: "VERIFIED",
+        historyStatus: "VERIFIED",
+        retrievedAt,
+        reason: null,
+      }],
+    });
+
+    expect(payload.sourceRegistry.find((source) => source.id === "federal-reserve-policy-actions")).toMatchObject({
+      sourceHealth: "AVAILABLE",
+      observedAt: "2026-08-01",
+      releasedAt: null,
+      retrievedAt,
+    });
   });
 
   it("keeps other observations available when one Treasury feed fails", async () => {

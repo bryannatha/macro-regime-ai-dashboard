@@ -142,7 +142,11 @@ function blsCoreFailures(
   ));
 }
 
-export function parseBlsCoreSources(payload: unknown, retrievedAt: string): CoreObservationSeriesResult[] {
+export function parseBlsCoreSources(
+  payload: unknown,
+  retrievedAt: string,
+  options: { preservePartialHistory?: boolean } = {},
+): CoreObservationSeriesResult[] {
   const verifiedRetrievedAt = parseIsoDate(retrievedAt.slice(0, 10)) ? retrievedAt : null;
   try {
     const body = payload as {
@@ -170,7 +174,7 @@ export function parseBlsCoreSources(payload: unknown, retrievedAt: string): Core
         return coreResult(definition.sourceId, definition.identifier, retrievedAt, "MISSING", "PARTIAL", "PARTIAL", [], "The registered BLS series was absent.");
       }
 
-      const byMonth = new Map<string, number>();
+      const byMonth = new Map<string, number | null>();
       for (const row of rows) {
         const yearToken = row.year;
         const periodToken = row.period;
@@ -178,8 +182,9 @@ export function parseBlsCoreSources(payload: unknown, retrievedAt: string): Core
         if (!/^\d{4}$/.test(yearToken ?? "") || !/^M(?:0[1-9]|1[0-2])$/.test(periodToken ?? "")) {
           return coreResult(definition.sourceId, definition.identifier, retrievedAt, "FAILED", "FAILED", "FAILED", [], "BLS returned an invalid monthly period.");
         }
-        const value = parseFiniteNumber(row.value);
-        if (value === null || (definition.positive && value <= 0) || (!definition.positive && (value < 0 || value > 100))) {
+        const missingValue = row.value?.trim() === "-";
+        const value = missingValue ? null : parseFiniteNumber(row.value);
+        if (!missingValue && (value === null || (definition.positive && value <= 0) || (!definition.positive && (value < 0 || value > 100)))) {
           return coreResult(definition.sourceId, definition.identifier, retrievedAt, "FAILED", "FAILED", "FAILED", [], "BLS returned a non-finite or out-of-range value.");
         }
         const period = `${yearToken}-${periodToken!.slice(1)}`;
@@ -199,11 +204,16 @@ export function parseBlsCoreSources(payload: unknown, retrievedAt: string): Core
       if (!contiguous) {
         return coreResult(definition.sourceId, definition.identifier, retrievedAt, "FAILED", "FAILED", "FAILED", [], "BLS history contains a missing monthly period.");
       }
-      if (periods.length < minimumMonthlyHistory) {
+      const validPeriods = periods.filter((period) => byMonth.get(period) !== null);
+      const unavailablePeriodIndex = periods.map((period) => byMonth.get(period) === null).lastIndexOf(true);
+      const usablePeriods = options.preservePartialHistory
+        ? validPeriods
+        : periods.slice(unavailablePeriodIndex + 1);
+      if (validPeriods.length < minimumMonthlyHistory || usablePeriods.length === 0) {
         return coreResult(definition.sourceId, definition.identifier, retrievedAt, "MISSING", "PARTIAL", "PARTIAL", [], "BLS history is shorter than the registered minimum.");
       }
 
-      const observations = periods.map((period): CoreSourceObservation => ({
+      const observations = usablePeriods.map((period): CoreSourceObservation => ({
         sourceId: definition.sourceId,
         identifier: definition.identifier,
         value: byMonth.get(period)!,
@@ -217,21 +227,43 @@ export function parseBlsCoreSources(payload: unknown, retrievedAt: string): Core
         version: null,
         vintage: null,
       }));
-      return coreResult(definition.sourceId, definition.identifier, retrievedAt, "AVAILABLE", "VERIFIED", "VERIFIED", observations);
+      const hasUnavailablePeriods = unavailablePeriodIndex >= 0;
+      return coreResult(
+        definition.sourceId,
+        definition.identifier,
+        retrievedAt,
+        "AVAILABLE",
+        "VERIFIED",
+        hasUnavailablePeriods ? "PARTIAL" : "VERIFIED",
+        observations,
+        hasUnavailablePeriods
+          ? options.preservePartialHistory
+            ? "BLS unavailable-month markers are omitted while other valid periods remain available for historical evaluation."
+            : "Only the contiguous run after the most recent BLS unavailable-month marker is exposed."
+          : null,
+      );
     });
   } catch {
     return blsCoreFailures(retrievedAt, "FAILED", "The BLS core response could not be parsed.");
   }
 }
 
-export async function fetchBlsCoreSources(options: AdapterOptions = {}): Promise<CoreObservationSeriesResult[]> {
+export async function fetchBlsCoreSources(options: AdapterOptions & {
+  historyStartYear?: number;
+  preservePartialHistory?: boolean;
+} = {}): Promise<CoreObservationSeriesResult[]> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const currentYear = (options.now ?? new Date()).getUTCFullYear();
+  const historyStartYear = options.historyStartYear ?? 2015;
   const retrievedAt = fetchedAtFrom(options.now ?? new Date());
   const seriesById = new Map<string, Array<{ year?: string; period?: string; value?: string }>>();
 
+  if (!Number.isInteger(historyStartYear) || historyStartYear < 1913 || historyStartYear > currentYear) {
+    return blsCoreFailures(null, "FAILED", "The requested BLS history start year was invalid.");
+  }
+
   try {
-    for (let startYear = 2015; startYear <= currentYear; startYear += 10) {
+    for (let startYear = historyStartYear; startYear <= currentYear; startYear += 10) {
       const endYear = Math.min(startYear + 9, currentYear);
       const response = await fetchImpl(endpoint, cachedFetchOptions(21600, {
         method: "POST",
@@ -261,7 +293,7 @@ export async function fetchBlsCoreSources(options: AdapterOptions = {}): Promise
     return parseBlsCoreSources({
       status: "REQUEST_SUCCEEDED",
       Results: { series: Array.from(seriesById.entries()).map(([seriesID, data]) => ({ seriesID, data })) },
-    }, retrievedAt);
+    }, retrievedAt, { preservePartialHistory: options.preservePartialHistory });
   } catch {
     return blsCoreFailures(null, "FAILED", "The BLS core history is temporarily unavailable.");
   }

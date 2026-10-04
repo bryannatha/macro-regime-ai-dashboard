@@ -1,6 +1,7 @@
 import type {
   CoreSourceCadence,
   SourceRegistryEntry,
+  SourceParserStatus,
   SourceState,
 } from "@/lib/types";
 import type {
@@ -10,6 +11,7 @@ import type {
   ResolvedQualitySlot,
   ResolvedSourceObservation,
   CoreSourceObservation,
+  CoreObservationSeriesResult,
 } from "./types";
 
 export { SOURCE_STATES } from "@/lib/types";
@@ -33,7 +35,7 @@ export const SOURCE_REGISTRY: readonly SourceRegistryEntry[] = [
     reuseReviewUrl: BLS_TERMS,
     attribution: "Cite U.S. Bureau of Labor Statistics, the retrieval date, and the BLS post-retrieval caveat; do not use the BLS logo.",
     cadence: "monthly",
-    firstUsablePeriod: "2015-01 (adapter history window)",
+    firstUsablePeriod: "2013-01 (diagnostic warm-up; dashboard adapter defaults to 2015-01)",
     units: ["index (1982-84=100)"],
     seasonalBases: ["NSA", "SA"],
     expectedReleaseSchedule: "Monthly CPI release calendar; preserve the actual publication date separately from the index month.",
@@ -106,7 +108,7 @@ export const SOURCE_REGISTRY: readonly SourceRegistryEntry[] = [
     reuseReviewUrl: BLS_TERMS,
     attribution: "Cite U.S. Bureau of Labor Statistics, the retrieval date, and the BLS post-retrieval caveat; do not use the BLS logo.",
     cadence: "monthly",
-    firstUsablePeriod: "2015-01 (adapter history window)",
+    firstUsablePeriod: "2013-01 (diagnostic warm-up; dashboard adapter defaults to 2015-01)",
     units: ["thousand persons", "percent"],
     seasonalBases: ["SA"],
     expectedReleaseSchedule: "Monthly Employment Situation release; publication date is distinct from reference month.",
@@ -494,4 +496,147 @@ export function freshnessAgeCeilingDays(cadence: CoreSourceCadence): number {
     quarterly: 160,
   };
   return ageCeilings[cadence];
+}
+
+function periodEndMillis(observedAt: string, cadence: CoreSourceCadence): number | null {
+  const date = new Date(observedAt + "T00:00:00.000Z");
+  if (!Number.isFinite(date.getTime())) return null;
+  const year = date.getUTCFullYear();
+  const month = date.getUTCMonth();
+  if (cadence === "monthly") return Date.UTC(year, month + 1, 0);
+  if (cadence === "quarterly") return Date.UTC(year, (Math.floor(month / 3) + 1) * 3, 0);
+  return date.getTime();
+}
+
+function prepareCoreSeries(
+  series: CoreObservationSeriesResult,
+  source: SourceRegistryEntry | undefined,
+  now: Date,
+): CoreObservationSeriesResult {
+  if (!source) {
+    return {
+      ...series,
+      state: "MISSING",
+      observations: [],
+      reason: "The source is not registered; its observations were not admitted.",
+    };
+  }
+  if (source.reuseStatus !== "CLEARED" || source.sourceHealth === "REDISTRIBUTION_BLOCKED") {
+    return {
+      ...series,
+      state: "REDISTRIBUTION_BLOCKED",
+      observations: [],
+      reason: source.healthReason ?? "Source-specific reuse/display clearance is unresolved.",
+    };
+  }
+  if (series.state !== "AVAILABLE" || !series.observations.length) return series;
+
+  const asOfDate = now.toISOString().slice(0, 10);
+  const latest = series.observations
+    .filter(({ observedAt }) => observedAt <= asOfDate)
+    .sort((a, b) => a.observedAt.localeCompare(b.observedAt))
+    .at(-1);
+  if (!latest) {
+    return {
+      ...series,
+      state: "MISSING",
+      observations: [],
+      reason: "No registered observation period is available at or before the current as-of date.",
+    };
+  }
+  // An effective policy action remains current until the next action is published.
+  if (source.id === "federal-reserve-policy-actions") return series;
+
+  const periodEnd = periodEndMillis(latest.observedAt, source.cadence);
+  const ageDays = periodEnd === null ? Infinity : (now.getTime() - periodEnd) / 86_400_000;
+  const ceiling = freshnessAgeCeilingDays(source.cadence);
+  if (!Number.isFinite(ageDays) || ageDays < 0 || ageDays > ceiling) {
+    return {
+      ...series,
+      state: "STALE",
+      reason: "Latest observation period is outside the " + ceiling + "-day " + source.cadence + " freshness window.",
+    };
+  }
+  return series;
+}
+
+function aggregateSeriesStatus(
+  source: SourceRegistryEntry,
+  series: CoreObservationSeriesResult[],
+  field: "parserStatus" | "historyStatus",
+): SourceParserStatus {
+  const values = series.map((item) => item[field]);
+  if (values.includes("FAILED")) return "FAILED";
+  const complete = source.identifiers.every((identifier) =>
+    series.some((item) => item.identifier === identifier && item[field] === "VERIFIED"));
+  if (complete) return "VERIFIED";
+  if (values.some((value) => value === "PARTIAL" || value === "VERIFIED")) return "PARTIAL";
+  return "UNVERIFIED";
+}
+
+function withCurrentSourceHealth(
+  source: SourceRegistryEntry,
+  series: CoreObservationSeriesResult[],
+  now: Date,
+): SourceRegistryEntry {
+  if (source.reuseStatus !== "CLEARED" || source.sourceHealth === "REDISTRIBUTION_BLOCKED") return source;
+  const matching = series.filter(({ sourceId }) => sourceId === source.id);
+  if (!matching.length) {
+    return {
+      ...source,
+      sourceHealth: "MISSING",
+      observedAt: null,
+      releasedAt: null,
+      retrievedAt: null,
+      healthReason: "No current adapter result is attached to this registered source.",
+    };
+  }
+
+  const usable = new Set(matching
+    .filter(({ state, observations }) => state === "AVAILABLE" && observations.length > 0)
+    .map(({ identifier }) => identifier));
+  const availableCount = source.identifiers.filter((identifier) => usable.has(identifier)).length;
+  const sourceHealth: SourceState = availableCount > 0
+    ? "AVAILABLE"
+    : matching.some(({ state }) => state === "STALE")
+      ? "STALE"
+      : matching.some(({ state }) => state === "FAILED")
+        ? "FAILED"
+        : matching.some(({ state }) => state === "REDISTRIBUTION_BLOCKED")
+          ? "REDISTRIBUTION_BLOCKED"
+          : "MISSING";
+  const unresolved = source.identifiers.filter((identifier) => !usable.has(identifier));
+  const healthReason = sourceHealth === "AVAILABLE" && unresolved.length
+    ? availableCount + " of " + source.identifiers.length + " registered series are available; remaining series: " + unresolved.join(", ") + "."
+    : sourceHealth === "AVAILABLE"
+      ? null
+      : matching.find(({ reason }) => reason)?.reason ?? "No eligible current observation is available.";
+  const observations = matching.flatMap(({ observations: values }) => values)
+    .filter(({ observedAt }) => observedAt <= now.toISOString().slice(0, 10))
+    .sort((a, b) => a.observedAt.localeCompare(b.observedAt));
+  const latest = observations.at(-1);
+
+  return {
+    ...source,
+    sourceHealth,
+    parserStatus: aggregateSeriesStatus(source, matching, "parserStatus"),
+    historyStatus: aggregateSeriesStatus(source, matching, "historyStatus"),
+    observedAt: latest?.observedAt ?? null,
+    releasedAt: latest?.releasedAt ?? null,
+    retrievedAt: latest?.retrievedAt ?? null,
+    healthReason,
+  };
+}
+
+export function prepareCurrentCoreSources(
+  sourceRegistry: SourceRegistryEntry[],
+  series: CoreObservationSeriesResult[],
+  now: Date,
+): { sourceRegistry: SourceRegistryEntry[]; series: CoreObservationSeriesResult[] } {
+  const sourceById = new Map(sourceRegistry.map((source) => [source.id, source]));
+  const preparedSeries = series.map((item) => prepareCoreSeries(item, sourceById.get(item.sourceId), now));
+  return {
+    sourceRegistry: sourceRegistry.map((source) => withCurrentSourceHealth(source, preparedSeries, now)),
+    series: preparedSeries,
+  };
 }

@@ -1,7 +1,6 @@
 import readXlsxFile, { type Sheet } from "read-excel-file/node";
 import { parseFiniteNumber, parseIsoDate } from "@/lib/market-data/parsers";
 import {
-  cachedFetchOptions,
   fetchedAtFrom,
   type AdapterOptions,
   type CoreObservationSeriesResult,
@@ -293,7 +292,7 @@ async function fetchWorkbook(
   endpoint: string,
   fetchImpl: typeof fetch,
 ): Promise<BeaSheet[]> {
-  const response = await fetchImpl(endpoint, cachedFetchOptions(86400));
+  const response = await fetchImpl(endpoint, { cache: "no-store" });
   if (!response.ok) throw new Error("BEA workbook request failed");
   const bytes = Buffer.from(await response.arrayBuffer());
   return await readXlsxFile(bytes);

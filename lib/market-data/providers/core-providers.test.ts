@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fetchBlsCoreSources, parseBlsCoreSources } from "./bls";
-import { parseBeaSection1Sheets, parseBeaSection2Sheets } from "./bea";
+import { CORE_SCORE_ANCHORS, transformAnnualized3m, transformUnemploymentGap, transformYoY } from "../core-transformations";
+import { fetchBeaCoreSources, parseBeaSection1Sheets, parseBeaSection2Sheets } from "./bea";
 import { fetchDolCoreClaims, parseDolCoreClaims } from "./dol";
-import { parseFederalReserveIndustrialProduction, parseFederalReservePolicyActions } from "./federal-reserve-core";
+import { fetchFederalReserveIndustrialProduction, parseFederalReserveIndustrialProduction, parseFederalReservePolicyActions } from "./federal-reserve-core";
 import { parseTreasuryRealYieldCore } from "./treasury";
 import { getSourceRegistry } from "@/lib/market-data/source-registry";
 import type { CoreObservationSeriesResult } from "@/lib/market-data/types";
@@ -111,8 +112,8 @@ function makeBeaSection2() {
   ];
 }
 
-function makeBlsPayload(monthCount = 140): unknown {
-  const periods = monthPeriods(2015, 1, monthCount).reverse();
+function makeBlsPayload(monthCount = 140, startYear = 2015): unknown {
+  const periods = monthPeriods(startYear, 1, monthCount).reverse();
   const ids = [
     "CUUR0000SA0",
     "CUUR0000SA0L1E",
@@ -160,12 +161,12 @@ describe("official anchor source adapters", () => {
     expect(source("bls-cpi")).toMatchObject({
       endpoint: "https://api.bls.gov/publicAPI/v1/timeseries/data/",
       identifiers: ["CUUR0000SA0", "CUUR0000SA0L1E", "CUSR0000SA0", "CUSR0000SA0L1E"],
-      firstUsablePeriod: "2015-01 (adapter history window)",
+      firstUsablePeriod: "2013-01 (diagnostic warm-up; dashboard adapter defaults to 2015-01)",
       reuseStatus: "CLEARED",
     });
     expect(source("bls-labor")).toMatchObject({
       endpoint: "https://api.bls.gov/publicAPI/v1/timeseries/data/",
-      firstUsablePeriod: "2015-01 (adapter history window)",
+      firstUsablePeriod: "2013-01 (diagnostic warm-up; dashboard adapter defaults to 2015-01)",
     });
     expect(source("dol-initial-claims")?.firstUsablePeriod).toBe("2015-01-03 (adapter history window)");
     expect(source("bea-gdp")).toMatchObject({
@@ -183,6 +184,14 @@ describe("official anchor source adapters", () => {
     expect(source("federal-reserve-g17-ip")?.identifiers).toEqual(["B50001"]);
     expect(source("dol-initial-claims")?.attribution).toContain("U.S. Department of Labor");
     expect(source("treasury-real-yield")).toMatchObject({ sourceHealth: "REDISTRIBUTION_BLOCKED", reuseStatus: "UNRESOLVED" });
+  });
+
+  it("documents the BLS warm-up period separately from the dashboard adapter's default start", () => {
+    const sources = getSourceRegistry();
+    expect(sources.find(({ id }) => id === "bls-cpi")?.firstUsablePeriod)
+      .toBe("2013-01 (diagnostic warm-up; dashboard adapter defaults to 2015-01)");
+    expect(sources.find(({ id }) => id === "bls-labor")?.firstUsablePeriod)
+      .toBe("2013-01 (diagnostic warm-up; dashboard adapter defaults to 2015-01)");
   });
 
   it("parses all registered BLS CPI and labor series with identifier, unit, basis, and independent timestamps", () => {
@@ -236,6 +245,54 @@ describe("official anchor source adapters", () => {
     });
   });
 
+  it("preserves only the contiguous BLS history after an explicit unavailable-month marker", () => {
+    const payload = makeBlsPayload() as { Results: { series: Array<{ data: Array<{ year: string; period: string; value: string }> }> } };
+    for (const series of payload.Results.series) {
+      const unavailableMonth = series.data.find((row) => row.year === "2025" && row.period === "M10");
+      if (unavailableMonth) unavailableMonth.value = "-";
+    }
+
+    const results = parseBlsCoreSources(payload, retrievedAt) as SeriesResult[];
+    const coreCpi = byId(results, "CUUR0000SA0L1E");
+    const unemployment = byId(results, "LNS14000000");
+
+    expect(coreCpi).toMatchObject({ state: "AVAILABLE", parserStatus: "VERIFIED", historyStatus: "PARTIAL" });
+    expect(coreCpi.observations[0].observedAt).toBe("2025-11-01");
+    expect(coreCpi.observations).toHaveLength(10);
+    expect(coreCpi.observations.some(({ observedAt }) => observedAt === "2025-10-01")).toBe(false);
+    expect(unemployment).toMatchObject({ state: "AVAILABLE", parserStatus: "VERIFIED", historyStatus: "PARTIAL" });
+    expect(unemployment.observations[0].observedAt).toBe("2025-11-01");
+
+    const cpiExpectation = { sourceId: "bls-cpi", identifier: "CUUR0000SA0L1E", unit: "index (1982-84=100)", seasonalBasis: "NSA", cadence: "monthly" } as const;
+    expect(transformYoY(coreCpi, cpiExpectation, CORE_SCORE_ANCHORS.inflation).score).toBeNull();
+    const saCore = byId(results, "CUSR0000SA0L1E");
+    expect(transformAnnualized3m(saCore, { ...cpiExpectation, identifier: "CUSR0000SA0L1E", seasonalBasis: "SA" }, CORE_SCORE_ANCHORS.inflation).score).not.toBeNull();
+    expect(transformUnemploymentGap(unemployment, {
+      sourceId: "bls-labor",
+      identifier: "LNS14000000",
+      unit: "percent",
+      seasonalBasis: "SA",
+      cadence: "monthly",
+    }, CORE_SCORE_ANCHORS.unemploymentGap).score).toBeNull();
+  });
+
+  it("retains valid pre-gap BLS observations when preparing diagnostic history", () => {
+    const payload = makeBlsPayload() as { Results: { series: Array<{ data: Array<{ year: string; period: string; value: string }> }> } };
+    for (const series of payload.Results.series) {
+      const unavailableMonth = series.data.find((row) => row.year === "2025" && row.period === "M10");
+      if (unavailableMonth) unavailableMonth.value = "-";
+    }
+
+    const results = parseBlsCoreSources(payload, retrievedAt, { preservePartialHistory: true }) as SeriesResult[];
+    const coreCpi = byId(results, "CUUR0000SA0L1E");
+
+    expect(coreCpi).toMatchObject({ state: "AVAILABLE", parserStatus: "VERIFIED", historyStatus: "PARTIAL" });
+    expect(coreCpi.observations).toHaveLength(139);
+    expect(coreCpi.observations[0].observedAt).toBe("2015-01-01");
+    expect(coreCpi.observations.at(-1)?.observedAt).toBe("2026-08-01");
+    expect(coreCpi.observations.some(({ observedAt }) => observedAt === "2025-10-01")).toBe(false);
+  });
+
   it("fetches BLS history in public v1 windows without requiring a registration key", async () => {
     const requests: Array<{ url: string; body: Record<string, unknown> }> = [];
     const results = await fetchBlsCoreSources({
@@ -258,6 +315,29 @@ describe("official anchor source adapters", () => {
     ]);
     expect(requests.every(({ body }) => !("registrationkey" in body))).toBe(true);
     expect(byId(results as SeriesResult[], "CUUR0000SA0").observations).toHaveLength(140);
+  });
+
+  it("loads BLS warm-up history from the requested year in ten-year public v1 windows", async () => {
+    const requests: Array<{ startyear: string; endyear: string }> = [];
+    const results = await fetchBlsCoreSources({
+      now: new Date(retrievedAt),
+      historyStartYear: 2013,
+      fetchImpl: async (_input, init) => {
+        const body = JSON.parse(String(init?.body)) as { startyear: string; endyear: string };
+        requests.push(body);
+        const payload = makeBlsPayload(167, 2013) as { Results: { series: Array<{ data: Array<{ year: string }> }> } };
+        for (const series of payload.Results.series) {
+          series.data = series.data.filter((row) => Number(row.year) >= Number(body.startyear) && Number(row.year) <= Number(body.endyear));
+        }
+        return new Response(JSON.stringify({ status: "REQUEST_SUCCEEDED", Results: payload.Results }), { status: 200 });
+      },
+    });
+
+    expect(requests.map(({ startyear, endyear }) => [startyear, endyear])).toEqual([
+      ["2013", "2022"],
+      ["2023", "2026"],
+    ]);
+    expect(byId(results as SeriesResult[], "CUUR0000SA0").observations[0].observedAt).toBe("2013-01-01");
   });
 
   it("parses BEA GDP only from the exact SAAR GDP rows and retains current-workbook vintage limits", () => {
@@ -318,6 +398,22 @@ describe("official anchor source adapters", () => {
       state: "MISSING",
       observations: [],
     });
+  });
+
+  it("does not put the oversized raw BEA workbooks in Next's fetch cache", async () => {
+    const requests: Array<{ url: string; cache: RequestCache | undefined }> = [];
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      requests.push({ url: String(input), cache: init?.cache });
+      return new Response(new Uint8Array(), { status: 200 });
+    });
+
+    await fetchBeaCoreSources({ fetchImpl, now: new Date(retrievedAt) });
+
+    expect(requests.map(({ url }) => url).sort()).toEqual([
+      "https://apps.bea.gov/national/Release/XLS/Survey/Section1All_xls.xlsx",
+      "https://apps.bea.gov/national/Release/XLS/Survey/Section2All_xls.xlsx",
+    ].sort());
+    expect(requests.every(({ cache }) => cache === "no-store")).toBe(true);
   });
 
   it("uses only the selected BEA table's publication date", () => {
@@ -509,6 +605,19 @@ describe("official anchor source adapters", () => {
       '"B50001" 2019 100.0 100.2 100.4 100.6 100.8 101.0 101.2 101.4 101.6 101.8 102.0',
     );
     expect(parseFederalReserveIndustrialProduction(shortenedHistoricalYear, retrievedAt)).toMatchObject({ state: "FAILED", observations: [] });
+  });
+
+  it("does not put the oversized raw G.17 file in Next's fetch cache", async () => {
+    let requestCache: RequestCache | undefined;
+    const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
+      requestCache = init?.cache;
+      return new Response(fixture("federal-reserve-g17-ip-sa.txt"), { status: 200 });
+    });
+
+    const result = await fetchFederalReserveIndustrialProduction({ fetchImpl, now: new Date(retrievedAt) });
+
+    expect(result.state).toBe("AVAILABLE");
+    expect(requestCache).toBe("no-store");
   });
 
   it("parses official target action dates and range midpoints without inventing announcement dates", () => {

@@ -69,25 +69,43 @@ function unavailableMetric(reason: string, unit = "", sourceIds: string[] = [], 
   };
 }
 
-function validAtAsOf(series: CoreObservationSeriesResult | null, asOf: string): CoreObservationSeriesResult | null {
+export type CoreFactorEvaluationMode = "point-in-time" | "current-revised-history";
+
+function validAtAsOf(
+  series: CoreObservationSeriesResult | null,
+  asOf: string,
+  mode: CoreFactorEvaluationMode,
+): CoreObservationSeriesResult | null {
   if (!series || series.state !== "AVAILABLE" || series.parserStatus !== "VERIFIED" ||
       series.historyStatus === "UNVERIFIED" || series.historyStatus === "FAILED" ||
-      !Number.isFinite(Date.parse(series.retrievedAt ?? "")) || series.retrievedAt! > asOf) return null;
+      !Number.isFinite(Date.parse(series.retrievedAt ?? "")) ||
+      mode === "point-in-time" && series.retrievedAt! > asOf) return null;
   if (series.observations.some((observation) =>
     observation.sourceId !== series.sourceId || observation.identifier !== series.identifier ||
     !Number.isFinite(observation.value) || !Number.isFinite(observation.releaseDateQuality) ||
     observation.releaseDateQuality < 0 || observation.releaseDateQuality > 1 ||
     !/^\d{4}-\d{2}-\d{2}$/.test(observation.observedAt) || !Number.isFinite(Date.parse(observation.observedAt)) ||
-    !Number.isFinite(Date.parse(observation.retrievedAt)) || observation.retrievedAt > asOf ||
-    (observation.releasedAt !== null && (!Number.isFinite(Date.parse(observation.releasedAt)) || observation.releasedAt > asOf.slice(0, 10)))
+    !Number.isFinite(Date.parse(observation.retrievedAt)) ||
+    mode === "point-in-time" && observation.retrievedAt > asOf ||
+    (observation.releasedAt !== null && (!Number.isFinite(Date.parse(observation.releasedAt)) ||
+      mode === "point-in-time" && observation.releasedAt > asOf.slice(0, 10)))
   )) return null;
-  return series;
+  if (mode === "point-in-time") return series;
+  return {
+    ...series,
+    observations: series.observations.filter(({ observedAt }) => observedAt <= asOf.slice(0, 10)),
+  };
 }
 
-function sourceSeries(sources: CoreObservationSeriesResult[], expected: SeriesExpectation, asOf: string): CoreObservationSeriesResult | null {
+function sourceSeries(
+  sources: CoreObservationSeriesResult[],
+  expected: SeriesExpectation,
+  asOf: string,
+  mode: CoreFactorEvaluationMode,
+): CoreObservationSeriesResult | null {
   const matches = sources.filter(({ sourceId, identifier }) => sourceId === expected.sourceId && identifier === expected.identifier);
   if (matches.length !== 1) return null;
-  const candidate = validAtAsOf(matches[0], asOf);
+  const candidate = validAtAsOf(matches[0], asOf, mode);
   if (!candidate || candidate.observations.some((observation) =>
     observation.unit !== expected.unit || observation.seasonalBasis !== expected.seasonalBasis)) return null;
   return candidate;
@@ -202,16 +220,26 @@ function factor(key: RegimeFactorKey, families: CoreMeasurementFamily[]): CoreFa
   };
 }
 
-function bySource(sources: CoreObservationSeriesResult[], expected: SeriesExpectation, asOf: string): CoreObservationSeriesResult | null {
-  return sourceSeries(sources, expected, asOf);
+function bySource(
+  sources: CoreObservationSeriesResult[],
+  expected: SeriesExpectation,
+  asOf: string,
+  mode: CoreFactorEvaluationMode,
+): CoreObservationSeriesResult | null {
+  return sourceSeries(sources, expected, asOf, mode);
 }
 
 function levelMetric(series: CoreObservationSeriesResult | null, expectation: SeriesExpectation, anchors: readonly (readonly [number, number])[]) {
   return transformLatestLevel(series, expectation, anchors);
 }
 
-function policyRateMetric(sources: CoreObservationSeriesResult[], asOf: string, corePceYoY: CoreTransformResult): CoreTransformResult {
-  const actions = bySource(sources, POLICY, asOf);
+function policyRateMetric(
+  sources: CoreObservationSeriesResult[],
+  asOf: string,
+  corePceYoY: CoreTransformResult,
+  mode: CoreFactorEvaluationMode,
+): CoreTransformResult {
+  const actions = bySource(sources, POLICY, asOf, mode);
   if (!actions || corePceYoY.value === null) {
     return unavailableMetric("The current target action or eligible core-PCE inflation rate is unavailable.", "percentage points");
   }
@@ -261,15 +289,21 @@ function validAsOf(asOf: string): boolean {
   return /^\d{4}-\d{2}-\d{2}T/.test(asOf) && Number.isFinite(Date.parse(asOf));
 }
 
-export function buildCoreFactors(sources: CoreObservationSeriesResult[], asOf: string): CoreFactorsResult {
+export function buildCoreFactors(
+  sources: CoreObservationSeriesResult[],
+  asOf: string,
+  options: { mode?: CoreFactorEvaluationMode } = {},
+): CoreFactorsResult {
   const timestamp = validAsOf(asOf) ? asOf : "1970-01-01T00:00:00.000Z";
+  const mode = options.mode ?? "point-in-time";
+  const at = (expected: SeriesExpectation) => bySource(sources, expected, timestamp, mode);
 
-  const cpiCoreYoY = transformYoY(bySource(sources, CPI_CORE_NSA, timestamp), CPI_CORE_NSA, CORE_SCORE_ANCHORS.inflation);
-  const cpiHeadlineYoY = transformYoY(bySource(sources, CPI_HEADLINE_NSA, timestamp), CPI_HEADLINE_NSA, CORE_SCORE_ANCHORS.inflation);
-  const pceCoreYoY = transformYoY(bySource(sources, PCE_CORE, timestamp), PCE_CORE, CORE_SCORE_ANCHORS.inflation);
-  const pceHeadlineYoY = transformYoY(bySource(sources, PCE_HEADLINE, timestamp), PCE_HEADLINE, CORE_SCORE_ANCHORS.inflation);
-  const cpiCoreMomentum = transformAnnualized3m(bySource(sources, CPI_CORE_SA, timestamp), CPI_CORE_SA, CORE_SCORE_ANCHORS.inflation);
-  const pceCoreMomentum = transformAnnualized3m(bySource(sources, PCE_CORE, timestamp), PCE_CORE, CORE_SCORE_ANCHORS.inflation);
+  const cpiCoreYoY = transformYoY(at(CPI_CORE_NSA), CPI_CORE_NSA, CORE_SCORE_ANCHORS.inflation);
+  const cpiHeadlineYoY = transformYoY(at(CPI_HEADLINE_NSA), CPI_HEADLINE_NSA, CORE_SCORE_ANCHORS.inflation);
+  const pceCoreYoY = transformYoY(at(PCE_CORE), PCE_CORE, CORE_SCORE_ANCHORS.inflation);
+  const pceHeadlineYoY = transformYoY(at(PCE_HEADLINE), PCE_HEADLINE, CORE_SCORE_ANCHORS.inflation);
+  const cpiCoreMomentum = transformAnnualized3m(at(CPI_CORE_SA), CPI_CORE_SA, CORE_SCORE_ANCHORS.inflation);
+  const pceCoreMomentum = transformAnnualized3m(at(PCE_CORE), PCE_CORE, CORE_SCORE_ANCHORS.inflation);
 
   const inflationFamilies = [
     family("inflation", "cpi", 0.5, [
@@ -282,10 +316,10 @@ export function buildCoreFactors(sources: CoreObservationSeriesResult[], asOf: s
     ], ["coreYoY"]),
   ];
 
-  const gdp = transformPublishedGDP(bySource(sources, GDP, timestamp), GDP);
-  const production = transformG3(bySource(sources, INDUSTRIAL_PRODUCTION, timestamp), INDUSTRIAL_PRODUCTION, CORE_SCORE_ANCHORS.realActivity);
-  const realPce = transformG3(bySource(sources, REAL_PCE, timestamp), REAL_PCE, CORE_SCORE_ANCHORS.realActivity);
-  const realIncome = transformG3(bySource(sources, REAL_DISPOSABLE_INCOME, timestamp), REAL_DISPOSABLE_INCOME, CORE_SCORE_ANCHORS.realActivity);
+  const gdp = transformPublishedGDP(at(GDP), GDP);
+  const production = transformG3(at(INDUSTRIAL_PRODUCTION), INDUSTRIAL_PRODUCTION, CORE_SCORE_ANCHORS.realActivity);
+  const realPce = transformG3(at(REAL_PCE), REAL_PCE, CORE_SCORE_ANCHORS.realActivity);
+  const realIncome = transformG3(at(REAL_DISPOSABLE_INCOME), REAL_DISPOSABLE_INCOME, CORE_SCORE_ANCHORS.realActivity);
   const growthFamilies = [
     scoreFamily("growth", "gdp", 0.25, gdp, 40),
     scoreFamily("growth", "production", 0.25, production, 120),
@@ -294,12 +328,12 @@ export function buildCoreFactors(sources: CoreObservationSeriesResult[], asOf: s
     unavailableFamily("growth", "housing", 0.125, [["housingStartsAndPermits", 1, 120]], "The approved housing source family has not been implemented.")
   ];
 
-  const payrollGrowth = transformG3(bySource(sources, PAYROLL, timestamp), PAYROLL, CORE_SCORE_ANCHORS.payroll);
-  const unemploymentLevel = levelMetric(bySource(sources, UNEMPLOYMENT, timestamp), UNEMPLOYMENT, CORE_SCORE_ANCHORS.unemploymentLevel);
-  const unemploymentGap = transformUnemploymentGap(bySource(sources, UNEMPLOYMENT, timestamp), UNEMPLOYMENT, CORE_SCORE_ANCHORS.unemploymentGap);
+  const payrollGrowth = transformG3(at(PAYROLL), PAYROLL, CORE_SCORE_ANCHORS.payroll);
+  const unemploymentLevel = levelMetric(at(UNEMPLOYMENT), UNEMPLOYMENT, CORE_SCORE_ANCHORS.unemploymentLevel);
+  const unemploymentGap = transformUnemploymentGap(at(UNEMPLOYMENT), UNEMPLOYMENT, CORE_SCORE_ANCHORS.unemploymentGap);
   const claimsIntensity = transformClaimsIntensity(
-    bySource(sources, CLAIMS, timestamp),
-    bySource(sources, PAYROLL, timestamp),
+    at(CLAIMS),
+    at(PAYROLL),
     CLAIMS,
     PAYROLL,
     CORE_SCORE_ANCHORS.claimsIntensity,
@@ -313,8 +347,8 @@ export function buildCoreFactors(sources: CoreObservationSeriesResult[], asOf: s
     scoreFamily("labor", "claims", 0.25, claimsIntensity, 520),
   ];
 
-  const realPolicy = policyRateMetric(sources, timestamp, pceCoreYoY);
-  const treasury = bySource(sources, TREASURY_REAL, timestamp) ?? sources.find(({ sourceId }) => sourceId === TREASURY_REAL.sourceId) ?? null;
+  const realPolicy = policyRateMetric(sources, timestamp, pceCoreYoY, mode);
+  const treasury = at(TREASURY_REAL) ?? sources.find(({ sourceId }) => sourceId === TREASURY_REAL.sourceId) ?? null;
   const realFinancing = treasury?.state === "REDISTRIBUTION_BLOCKED"
     ? unavailableMetric("Treasury real-yield redistribution is blocked pending source-specific clearance.", "percent", [TREASURY_REAL.sourceId], [TREASURY_REAL.identifier])
     : unavailableMetric("No eligible Treasury 10-year real par-yield history was supplied.", "percent", [TREASURY_REAL.sourceId], [TREASURY_REAL.identifier]);
@@ -323,11 +357,11 @@ export function buildCoreFactors(sources: CoreObservationSeriesResult[], asOf: s
     scoreFamily("policyRates", "realFinancing", 0.5, realFinancing, 2520),
   ];
 
-  const creditStandardsLarge = transformCreditStandards(bySource(sources, { sourceId: "federal-reserve-sloos", identifier: SLOOS_LARGE_MEDIUM, unit: "percent net", seasonalBasis: "Not seasonally adjusted", cadence: "quarterly" }, timestamp), SLOOS_LARGE_MEDIUM);
-  const creditStandardsSmall = transformCreditStandards(bySource(sources, { sourceId: "federal-reserve-sloos", identifier: SLOOS_SMALL, unit: "percent net", seasonalBasis: "Not seasonally adjusted", cadence: "quarterly" }, timestamp), SLOOS_SMALL);
-  const creditVolume = transformCreditVolume(bySource(sources, H8_LOANS, timestamp));
-  const delinquency = levelMetric(bySource(sources, DELINQUENCY, timestamp), DELINQUENCY, CORE_SCORE_ANCHORS.delinquency);
-  const chargeOff = levelMetric(bySource(sources, CHARGE_OFF, timestamp), CHARGE_OFF, CORE_SCORE_ANCHORS.chargeOff);
+  const creditStandardsLarge = transformCreditStandards(at({ sourceId: "federal-reserve-sloos", identifier: SLOOS_LARGE_MEDIUM, unit: "percent net", seasonalBasis: "Not seasonally adjusted", cadence: "quarterly" }), SLOOS_LARGE_MEDIUM);
+  const creditStandardsSmall = transformCreditStandards(at({ sourceId: "federal-reserve-sloos", identifier: SLOOS_SMALL, unit: "percent net", seasonalBasis: "Not seasonally adjusted", cadence: "quarterly" }), SLOOS_SMALL);
+  const creditVolume = transformCreditVolume(at(H8_LOANS));
+  const delinquency = levelMetric(at(DELINQUENCY), DELINQUENCY, CORE_SCORE_ANCHORS.delinquency);
+  const chargeOff = levelMetric(at(CHARGE_OFF), CHARGE_OFF, CORE_SCORE_ANCHORS.chargeOff);
   const creditFamilies = [
     family("creditConditions", "standards", 0.4, [
       slotDefinition("largeAndMedium", 0.5, creditStandardsLarge, 40),
@@ -340,9 +374,9 @@ export function buildCoreFactors(sources: CoreObservationSeriesResult[], asOf: s
     ], []),
   ];
   const balanceSheetProxy = transformLiquidityProxy(
-    bySource(sources, H41_ASSETS, timestamp),
-    bySource(sources, H41_TGA, timestamp),
-    bySource(sources, H41_RRP_OTHERS, timestamp),
+    at(H41_ASSETS),
+    at(H41_TGA),
+    at(H41_RRP_OTHERS),
   );
   if (balanceSheetProxy.score === null) {
     balanceSheetProxy.sourceIds = [H41_ASSETS.sourceId];
@@ -350,7 +384,7 @@ export function buildCoreFactors(sources: CoreObservationSeriesResult[], asOf: s
     balanceSheetProxy.dependencyIds = [H41_ASSETS, H41_TGA, H41_RRP_OTHERS].map(({ sourceId, identifier }) => `${sourceId}:${identifier}`);
     balanceSheetProxy.reason = "H.4.1 does not publish total assets on the weekly-average basis required by the approved LP equation.";
   }
-  const realM2 = transformRealM2(bySource(sources, H6_M2, timestamp), bySource(sources, PCE_HEADLINE, timestamp));
+  const realM2 = transformRealM2(at(H6_M2), at(PCE_HEADLINE));
   const liquidityFamilies = [
     scoreFamily("liquidityProxy", "balanceSheetProxy", 0.5, balanceSheetProxy, 520),
     scoreFamily("liquidityProxy", "realM2", 0.5, realM2, 120),

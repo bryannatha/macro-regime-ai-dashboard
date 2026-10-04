@@ -8,20 +8,23 @@ import { TREASURY_POLICY_BLOCKER } from "@/lib/types";
 import { getResearchImplications } from "@/lib/playbook";
 import { evaluateRegime } from "@/lib/regime";
 import { calculateScores } from "@/lib/scoring";
+import { buildCoreFactors } from "./core-factors";
 import { createUnavailableObservation } from "./parsers";
-import type { AdapterOptions } from "./types";
-import { getSourceRegistry } from "./source-registry";
+import { createRegimeInputsFromCoreFactors } from "./regime-inputs";
+import { getSourceRegistry, prepareCurrentCoreSources } from "./source-registry";
 import { fetchBlsCpi } from "./providers/bls";
+import { fetchCoreHistorySources, type CoreHistoryOptions } from "./providers/core-history";
 import { fetchDolClaims } from "./providers/dol";
 import { fetchEiaBrent } from "./providers/eia";
 import { fetchFedBroadDollar } from "./providers/fed";
 import { fetchFrankfurterUsdIdr } from "./providers/frankfurter";
 import { fetchMempoolDemand } from "./providers/mempool";
 import { fetchTreasuryYields } from "./providers/treasury";
-import { createUnconfiguredRegimeInputs } from "./regime-inputs";
+import type { AdapterOptions, CoreObservationSeriesResult } from "./types";
 
 export interface DashboardOptions extends AdapterOptions {
   eiaApiKey?: string;
+  loadCoreSources?: (options: CoreHistoryOptions) => Promise<CoreObservationSeriesResult[]>;
 }
 
 const sources = {
@@ -111,8 +114,14 @@ export async function getDashboardPayload(options: DashboardOptions = {}): Promi
   const now = options.now ?? new Date();
   const generatedAt = now.toISOString();
   const adapterOptions = { fetchImpl: options.fetchImpl, now };
+  const coreAdapterOptions: CoreHistoryOptions = options.loadCoreSources
+    ? adapterOptions
+    : {
+        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
+        ...(options.now ? { now: options.now } : {}),
+      };
 
-  const [bls, oil, treasury, claims, dollar, mempool, usdidr] = await Promise.all([
+  const [bls, oil, treasury, claims, dollar, mempool, usdidr, coreSources] = await Promise.all([
     isolateFailure(
       fetchBlsCpi(adapterOptions),
       {
@@ -149,6 +158,10 @@ export async function getDashboardPayload(options: DashboardOptions = {}): Promi
     isolateFailure(
       fetchFrankfurterUsdIdr(adapterOptions),
       unavailable("usdidr", "USD / IDR (ECB cross)", "IDR per USD", sources.frankfurter.name, sources.frankfurter.url, generatedAt, "Daily"),
+    ),
+    isolateFailure(
+      (options.loadCoreSources ?? fetchCoreHistorySources)(coreAdapterOptions),
+      [] as CoreObservationSeriesResult[],
     ),
   ]);
 
@@ -193,13 +206,15 @@ export async function getDashboardPayload(options: DashboardOptions = {}): Promi
     observation.status === "available" && observation.observedAt ? [observation.observedAt] : [],
   );
   const scores = calculateScores(observations);
-  // Current public feeds are monitoring proxies, not the registered two-family core-factor inputs.
-  const sourceRegistry = getSourceRegistry();
+  const preparedCore = prepareCurrentCoreSources(getSourceRegistry(), coreSources, now);
+  const sourceRegistry = preparedCore.sourceRegistry;
   const sourceBlockers = sourceRegistry.some((source) =>
     source.id === "treasury-real-yield" && source.sourceHealth === "REDISTRIBUTION_BLOCKED")
     ? [TREASURY_POLICY_BLOCKER]
     : [];
-  const regime = evaluateRegime(createUnconfiguredRegimeInputs(sourceBlockers));
+  const regimeInputs = createRegimeInputsFromCoreFactors(buildCoreFactors(preparedCore.series, generatedAt));
+  regimeInputs.sourceBlockers = Array.from(new Set([...sourceBlockers, ...(regimeInputs.sourceBlockers ?? [])]));
+  const regime = evaluateRegime(regimeInputs);
 
   return {
     generatedAt,
