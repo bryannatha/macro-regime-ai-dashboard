@@ -63,9 +63,39 @@ describe("GET /api/ai-report", () => {
     expect(report.executiveSummary).toContain("monitoring indicators");
     expect(report.executiveSummary).toMatch(/missing inputs/i);
     expect(report.researchImplications).toBeNull();
+    expect(report.leadingDirection.direction).toBe("UNKNOWN");
+    expect(report.inflationDirection.direction).toBe("UNKNOWN");
+    expect(report.transitionRisk.level).toBe("UNKNOWN");
     expect(report.riskNote).toContain("Educational research tool, not financial advice.");
     expect(JSON.stringify(report)).not.toContain("EIA_API_KEY");
     expect(JSON.stringify(report)).not.toMatch(/\b(favor|reduce)\b/i);
+  });
+
+  it("keeps the Treasury blocker and withheld regime in a deterministic report", async () => {
+    const blocker = "POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED";
+    const blocked = evaluateRegime(createUnconfiguredRegimeInputs([blocker]));
+    vi.mocked(getDashboardPayload).mockResolvedValue(dashboard(blocked));
+
+    const first = await (await GET()).json();
+    const second = await (await GET()).json();
+
+    expect(JSON.stringify(first)).toBe(JSON.stringify(second));
+    expect(first).toMatchObject({ regime: null, assessmentStatus: "INSUFFICIENT_DATA" });
+    expect(first.executiveSummary).toContain(blocker);
+    expect(first.researchImplications).toBeNull();
+    expect(first.leadingDirection.direction).toBe("UNKNOWN");
+    expect(first.inflationDirection.direction).toBe("UNKNOWN");
+    expect(first.transitionRisk.level).toBe("UNKNOWN");
+  });
+
+  it("suppresses research implications for a provisional regime even when a label is resolved", async () => {
+    const provisional = { ...normalRegime, assessmentStatus: "PROVISIONAL" as const };
+    vi.mocked(getDashboardPayload).mockResolvedValue(dashboard(provisional));
+
+    const report = await (await GET()).json();
+
+    expect(report).toMatchObject({ regime: "INFLATIONARY_EXPANSION", assessmentStatus: "PROVISIONAL" });
+    expect(report.researchImplications).toBeNull();
   });
 
   it("returns descriptive regime implications without causal demand language", async () => {

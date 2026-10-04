@@ -124,6 +124,14 @@ export type AssessmentStatus = "NORMAL" | "PROVISIONAL" | "INSUFFICIENT_DATA";
 export type SensitivityClass = "ROBUST" | "MODERATELY_SENSITIVE" | "FRAGILE";
 export type GateResult = "TRUE" | "FALSE" | "UNKNOWN";
 export type ActivitySeverity = "STANDARD" | "CONTRACTION_LEVEL";
+export type MacroDirection =
+  | "STRONGLY_IMPROVING"
+  | "IMPROVING"
+  | "NEUTRAL"
+  | "DETERIORATING"
+  | "STRONGLY_DETERIORATING"
+  | "UNKNOWN";
+export type TransitionRiskLevel = "LOW" | "MODERATE" | "ELEVATED" | "UNKNOWN";
 
 export type RegimeFactorKey =
   | "inflation"
@@ -136,6 +144,11 @@ export type RegimeFactorKey =
 export type RegimeAnchors = Exclude<RegimeFactorKey, "creditConditions" | "liquidityProxy">;
 
 export interface ScoreBounds {
+  lower: number;
+  upper: number;
+}
+
+export interface DirectionScoreRange {
   lower: number;
   upper: number;
 }
@@ -171,10 +184,53 @@ export interface RegimeNativeInputs {
   creditVolume?: number | null;
 }
 
+export interface FactorMomentumInput {
+  scoreChange: number | null;
+  commonEligibleWeight: number;
+  commonEligibleFamilies: number;
+}
+
+export interface SourceMomentumInputs {
+  growth: FactorMomentumInput | null;
+  labor: FactorMomentumInput | null;
+  credit: FactorMomentumInput | null;
+}
+
+export interface LeadingDirectionAssessment {
+  direction: MacroDirection;
+  weightedScore: number | null;
+  scoreRange: DirectionScoreRange | null;
+  dispersion: number | null;
+  votes: {
+    growth: MacroDirection;
+    labor: MacroDirection;
+    credit: MacroDirection;
+  };
+  reason: string | null;
+}
+
+export interface InflationDirectionAssessment {
+  direction: MacroDirection;
+  deltaPi: number | null;
+}
+
+export interface TransitionRiskAssessment {
+  level: TransitionRiskLevel;
+  reasonCodes: string[];
+}
+
+export interface PriorTensionComparison {
+  comparable: boolean;
+  tensions: RegimeTension[];
+}
+
 export interface RegimeInputs {
   factors: Record<RegimeFactorKey, RegimeFactorInput>;
   native: RegimeNativeInputs;
   qualitySlots: QualitySlotInput[];
+  sourceMomentum?: SourceMomentumInputs | null;
+  priorTensionComparison?: PriorTensionComparison | null;
+  sourceBlockers?: string[];
 }
 
 export interface RuleDiagnostic {
@@ -198,6 +254,8 @@ export interface RegimeSensitivity {
   coherentAgreement: number;
   agreement: number;
   nativeGuardChanged: boolean;
+  differentResolvedRegime: boolean;
+  differentNamedRegime: boolean;
 }
 
 export interface FactorReadiness {
@@ -218,6 +276,9 @@ export interface RegimeAssessment {
   factorReadiness: Record<RegimeFactorKey, FactorReadiness>;
   ruleDiagnostics: Record<Regime, RuleDiagnostic>;
   tensions: RegimeTension[];
+  leadingDirection: LeadingDirectionAssessment;
+  inflationDirection: InflationDirectionAssessment;
+  transitionRisk: TransitionRiskAssessment;
 }
 
 export interface ResearchImplications {
@@ -248,6 +309,9 @@ export interface AIReport {
   assessmentStatus: AssessmentStatus;
   dataQuality: number | null;
   regimeClarity: number | null;
+  leadingDirection: LeadingDirectionAssessment;
+  inflationDirection: InflationDirectionAssessment;
+  transitionRisk: TransitionRiskAssessment;
   executiveSummary: string;
   signals: string[];
   watchlist: string[];

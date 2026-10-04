@@ -5,7 +5,7 @@ import {
   REGIMES,
   REGIME_LABELS,
 } from "@/lib/regime";
-import type { RegimeInputs } from "@/lib/types";
+import type { PriorTensionComparison, RegimeInputs, SourceMomentumInputs } from "@/lib/types";
 
 const family = (score: number | null, options: Partial<RegimeInputs["factors"]["inflation"]> = {}) => ({
   bounds: score === null ? null : { lower: score, upper: score },
@@ -58,7 +58,222 @@ function inputs(
   };
 }
 
+function momentum(
+  scoreChange: number | null,
+  commonEligibleWeight = 1,
+  commonEligibleFamilies = 3,
+) {
+  return { scoreChange, commonEligibleWeight, commonEligibleFamilies };
+}
+
+function withMomentum(
+  input: RegimeInputs,
+  sourceMomentum: SourceMomentumInputs,
+  priorTensionComparison: PriorTensionComparison | null = null,
+): RegimeInputs {
+  return { ...input, sourceMomentum, priorTensionComparison };
+}
+
 describe("US macro regime v0.3", () => {
+  it.each([
+    [-20, "STRONGLY_IMPROVING"],
+    [-8, "IMPROVING"],
+    [-7.99, "NEUTRAL"],
+    [7.99, "NEUTRAL"],
+    [8, "DETERIORATING"],
+    [20, "STRONGLY_DETERIORATING"],
+  ])("maps source stress-score change %i to its approved direction band", (change, direction) => {
+    const result = evaluateRegime(withMomentum(inputs(), {
+      growth: momentum(change), labor: momentum(change), credit: momentum(change),
+    }));
+
+    expect(result.leadingDirection.votes.growth).toBe(direction);
+  });
+
+  it("requires 60% common eligible weight and two families for a factor direction", () => {
+    const result = evaluateRegime(withMomentum(inputs(), {
+      growth: momentum(20, 0.59, 3),
+      labor: momentum(0, 1, 1),
+      credit: momentum(0),
+    }));
+
+    expect(result.leadingDirection.votes.growth).toBe("UNKNOWN");
+    expect(result.leadingDirection.votes.labor).toBe("UNKNOWN");
+    expect(result.leadingDirection.direction).toBe("UNKNOWN");
+  });
+
+  it("applies deterioration breadth before the weighted mean", () => {
+    const result = evaluateRegime(withMomentum(inputs(), {
+      growth: momentum(8), labor: momentum(8), credit: momentum(-20),
+    }));
+
+    expect(result.leadingDirection.weightedScore).toBeCloseTo(0.4, 8);
+    expect(result.leadingDirection.direction).toBe("DETERIORATING");
+  });
+
+  it("uses two strong deteriorating factor votes to override a milder weighted mean", () => {
+    const result = evaluateRegime(withMomentum(inputs(), {
+      growth: momentum(20), labor: momentum(20), credit: momentum(-20),
+    }));
+
+    expect(result.leadingDirection.weightedScore).toBeCloseTo(1.2, 8);
+    expect(result.leadingDirection.direction).toBe("STRONGLY_DETERIORATING");
+  });
+
+  it("does not apply symmetric improvement breadth when a deteriorating vote is observed", () => {
+    const result = evaluateRegime(withMomentum(inputs(), {
+      growth: momentum(-8), labor: momentum(-8), credit: momentum(20),
+    }));
+
+    expect(result.leadingDirection.direction).toBe("NEUTRAL");
+  });
+
+  it("keeps an unknown credit vote across its full range instead of imputing neutral", () => {
+    const result = evaluateRegime(withMomentum(inputs(), {
+      growth: momentum(8), labor: momentum(0), credit: null,
+    }));
+
+    expect(result.leadingDirection.votes.credit).toBe("UNKNOWN");
+    expect(result.leadingDirection.scoreRange).toEqual({ lower: 0, upper: 0.8 });
+    expect(result.leadingDirection.weightedScore).toBeNull();
+    expect(result.leadingDirection.direction).toBe("UNKNOWN");
+  });
+
+  it("resolves a missing credit vote when Growth and Labor make the direction invariant", () => {
+    const result = evaluateRegime(withMomentum(inputs(), {
+      growth: momentum(20), labor: momentum(20), credit: null,
+    }));
+
+    expect(result.leadingDirection.direction).toBe("STRONGLY_DETERIORATING");
+    expect(result.leadingDirection.weightedScore).toBeNull();
+    expect(result.leadingDirection.scoreRange).toEqual({ lower: 1.2, upper: 2 });
+  });
+
+  it("exposes dispersion across the qualified factor votes", () => {
+    const result = evaluateRegime(withMomentum(inputs(), {
+      growth: momentum(-20), labor: momentum(0), credit: momentum(20),
+    }));
+
+    expect(result.leadingDirection.votes).toEqual({
+      growth: "STRONGLY_IMPROVING",
+      labor: "NEUTRAL",
+      credit: "STRONGLY_DETERIORATING",
+    });
+    expect(result.leadingDirection.dispersion).toBe(4);
+  });
+
+  it.each([
+    [-1, "STRONGLY_IMPROVING"],
+    [-0.3, "IMPROVING"],
+    [0.299, "NEUTRAL"],
+    [0.3, "DETERIORATING"],
+    [1, "STRONGLY_DETERIORATING"],
+  ])("maps core inflation pace change %s pp to %s", (deltaPi, direction) => {
+    expect(evaluateRegime(inputs({}, { deltaPi })).inflationDirection.direction).toBe(direction);
+  });
+
+  it("proves Elevated transition risk from three deteriorating source directions despite other missing comparisons", () => {
+    const result = evaluateRegime(withMomentum(inputs({}, { deltaR: null, deltaTarget: null }), {
+      growth: momentum(8), labor: momentum(8), credit: momentum(8),
+    }));
+
+    expect(result.transitionRisk).toMatchObject({ level: "ELEVATED", reasonCodes: ["three_deteriorating_factors"] });
+  });
+
+  it("proves Elevated transition risk from two strongly deteriorating directions", () => {
+    const result = evaluateRegime(withMomentum(inputs({}, { deltaR: null, deltaTarget: null }), {
+      growth: momentum(20), labor: momentum(20), credit: momentum(0),
+    }));
+
+    expect(result.transitionRisk.level).toBe("ELEVATED");
+    expect(result.transitionRisk.reasonCodes).toContain("two_strongly_deteriorating_factors");
+  });
+
+  it("proves Elevated transition risk from a one-point real-rate move and one deteriorating factor", () => {
+    const result = evaluateRegime(withMomentum(inputs({}, { deltaR: -1, deltaTarget: null }), {
+      growth: momentum(8), labor: momentum(0), credit: momentum(0),
+    }));
+
+    expect(result.transitionRisk).toMatchObject({ level: "ELEVATED", reasonCodes: ["rate_shock_with_deterioration"] });
+  });
+
+  it("reports Moderate transition risk for two deteriorating factors when comparisons are complete", () => {
+    const result = evaluateRegime(withMomentum(inputs(), {
+      growth: momentum(8), labor: momentum(8), credit: momentum(0),
+    }, { comparable: true, tensions: [] }));
+
+    expect(result.transitionRisk).toMatchObject({ level: "MODERATE", reasonCodes: ["two_deteriorating_factors"] });
+  });
+
+  it("reports Moderate transition risk for a half-point target move with one deteriorating factor", () => {
+    const result = evaluateRegime(withMomentum(inputs({}, { deltaTarget: -0.5 }), {
+      growth: momentum(8), labor: momentum(0), credit: momentum(0),
+    }, { comparable: true, tensions: [] }));
+
+    expect(result.transitionRisk).toMatchObject({
+      level: "MODERATE",
+      reasonCodes: ["rate_or_target_change_with_deterioration"],
+    });
+  });
+
+  it("reports a new core tension as Moderate, but a static tension alone does not raise risk", () => {
+    const base = inputs({}, { creditStandards: 60, creditVolume: 35 });
+    const sources = { growth: momentum(0), labor: momentum(0), credit: momentum(0) };
+    const newTension = evaluateRegime(withMomentum(base, sources, { comparable: true, tensions: [] }));
+    const sameTension = evaluateRegime(withMomentum(base, sources, {
+      comparable: true,
+      tensions: [{ code: "supply_volume_tension", severity: 40, scope: "core", clarityRole: "RESIDUAL_TENSION" }],
+    }));
+    const worsenedTension = evaluateRegime(withMomentum(base, sources, {
+      comparable: true,
+      tensions: [{ code: "supply_volume_tension", severity: 15, scope: "core", clarityRole: "RESIDUAL_TENSION" }],
+    }));
+
+    expect(newTension.transitionRisk).toMatchObject({ level: "MODERATE", reasonCodes: ["core_tension_new_or_worsened"] });
+    expect(sameTension.transitionRisk).toMatchObject({ level: "LOW", reasonCodes: [] });
+    expect(worsenedTension.transitionRisk).toMatchObject({ level: "MODERATE", reasonCodes: ["core_tension_new_or_worsened"] });
+  });
+
+  it("marks a different resolved sensitivity label as Moderate without changing the base regime", () => {
+    const result = evaluateRegime(withMomentum(inputs({
+      inflation: 75, growth: 45, labor: 50,
+    }, { deltaPi: 0.8 }), {
+      growth: momentum(0), labor: momentum(0), credit: momentum(0),
+    }, { comparable: true, tensions: [] }));
+
+    expect(result.regime).toBe("INFLATIONARY_EXPANSION");
+    expect(result.sensitivity?.differentResolvedRegime).toBe(true);
+    expect(result.transitionRisk).toMatchObject({
+      level: "MODERATE",
+      reasonCodes: ["sensitivity_resolved_label_change"],
+    });
+  });
+
+  it("keeps Transition Risk unknown when comparisons are unavailable unless Elevated is proved", () => {
+    const incomplete = evaluateRegime(withMomentum(inputs({}, { deltaR: 0.7, deltaTarget: 0 }), {
+      growth: momentum(8), labor: momentum(8), credit: momentum(0),
+    }));
+    const elevated = evaluateRegime(withMomentum(inputs({}, { deltaR: null, deltaTarget: null }), {
+      growth: momentum(20), labor: momentum(20), credit: momentum(0),
+    }));
+
+    expect(incomplete.transitionRisk.level).toBe("UNKNOWN");
+    expect(incomplete.transitionRisk.reasonCodes).toContain("transition_comparison_unavailable");
+    expect(elevated.transitionRisk.level).toBe("ELEVATED");
+  });
+
+  it("surfaces the Treasury reuse blocker without assigning a regime", () => {
+    const input = inputs();
+    input.factors.policyRates = family(null);
+    (input as RegimeInputs & { sourceBlockers: string[] }).sourceBlockers = ["POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED"];
+    const result = evaluateRegime(input);
+
+    expect(result.assessmentStatus).toBe("INSUFFICIENT_DATA");
+    expect(result.regime).toBeNull();
+    expect(result.reasonCodes).toContain("POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED");
+    expect(result.reasonCodes).toContain("anchor_unavailable:policyRates");
+  });
+
   it("uses the approved enum taxonomy and descriptive expansion label", () => {
     expect(REGIMES).toEqual([
       "GOLDILOCKS",
@@ -151,6 +366,8 @@ describe("US macro regime v0.3", () => {
       same: 34,
       total: 34,
       agreement: 100,
+      differentResolvedRegime: false,
+      differentNamedRegime: false,
     });
     expect(result.regimeClarity).toBe(98);
     expect(result.ruleDiagnostics.MIXED.support).toBe(96);

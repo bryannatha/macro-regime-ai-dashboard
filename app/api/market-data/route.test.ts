@@ -70,4 +70,27 @@ describe("GET /api/market-data", () => {
     expect(JSON.stringify(body)).not.toContain("api_key");
     expect(JSON.stringify(body)).not.toContain("synthetic");
   });
+
+  it("serializes unknown directions and the unresolved Treasury blocker without assigning a regime", async () => {
+    const blocker = "POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED";
+    const blockedPayload: DashboardPayload = {
+      ...payload,
+      regime: evaluateRegime(createUnconfiguredRegimeInputs([blocker])),
+    };
+    vi.mocked(getDashboardPayload).mockResolvedValue(blockedPayload);
+
+    const first = await (await GET()).json() as DashboardPayload;
+    const second = await (await GET()).json() as DashboardPayload;
+
+    expect(JSON.stringify(first)).toBe(JSON.stringify(second));
+    expect(first.regime).toMatchObject({
+      assessmentStatus: "INSUFFICIENT_DATA",
+      regime: null,
+      regimeClarity: null,
+      reasonCodes: expect.arrayContaining([blocker, "anchor_unavailable:inflation", "anchor_unavailable:growth"]),
+      leadingDirection: { direction: "UNKNOWN" },
+      inflationDirection: { direction: "UNKNOWN" },
+      transitionRisk: { level: "UNKNOWN" },
+    });
+  });
 });

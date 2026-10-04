@@ -1,6 +1,9 @@
 import type {
   GateResult,
   FactorReadiness,
+  InflationDirectionAssessment,
+  LeadingDirectionAssessment,
+  MacroDirection,
   QualitySlotInput,
   Regime,
   RegimeAssessment,
@@ -10,6 +13,8 @@ import type {
   RegimeSensitivity,
   RegimeTension,
   RuleDiagnostic,
+  SourceMomentumInputs,
+  TransitionRiskAssessment,
 } from "@/lib/types";
 import { REGIMES } from "@/lib/types";
 
@@ -399,6 +404,8 @@ function sensitivityFor(inputs: RegimeInputs, baseResult: Regime): RegimeSensiti
   const coherentAgreement = 100 * results.slice(singleCount).filter((result) => result === baseResult).length / 2;
   const agreement = Math.min(singleAgreement, coherentAgreement);
   const namedSwitch = baseResult !== "MIXED" && results.some((result) => result !== null && result !== "MIXED" && result !== baseResult);
+  const differentResolvedRegime = results.some((result) => result !== null && result !== baseResult);
+  const differentNamedRegime = results.some((result) => result !== null && result !== "MIXED" && result !== baseResult);
   const nativeVariants: Array<Partial<NativeGuardThresholds>> = [
     { realPolicyRate: 1.25 }, { realPolicyRate: 1.75 },
     { deltaR: .25 }, { deltaR: .75 },
@@ -412,7 +419,17 @@ function sensitivityFor(inputs: RegimeInputs, baseResult: Regime): RegimeSensiti
   });
   const classification = nativeGuardChanged || agreement < 80 || namedSwitch ? "FRAGILE"
     : same === scenarios.length ? "ROBUST" : "MODERATELY_SENSITIVE";
-  return { classification, same, total: scenarios.length, singleAgreement, coherentAgreement, agreement, nativeGuardChanged };
+  return {
+    classification,
+    same,
+    total: scenarios.length,
+    singleAgreement,
+    coherentAgreement,
+    agreement,
+    nativeGuardChanged,
+    differentResolvedRegime,
+    differentNamedRegime,
+  };
 }
 
 function diagnostics(outcomes: RuleOutcomes, ruleSupport: Record<Exclude<Regime, "MIXED">, number>, mixedSupport: number): Record<Regime, RuleDiagnostic> {
@@ -446,8 +463,188 @@ function factorReadiness(inputs: RegimeInputs): Record<RegimeInputs["factors"] e
   }])) as Record<RegimeInputs["factors"] extends Record<infer K, RegimeFactorInput> ? K : never, FactorReadiness>;
 }
 
+const DIRECTION_VALUE: Record<Exclude<MacroDirection, "UNKNOWN">, number> = {
+  STRONGLY_IMPROVING: -2,
+  IMPROVING: -1,
+  NEUTRAL: 0,
+  DETERIORATING: 1,
+  STRONGLY_DETERIORATING: 2,
+};
+
+const LEADING_WEIGHTS = { growth: 0.4, labor: 0.4, credit: 0.2 } as const;
+const POSSIBLE_VOTES = [-2, -1, 0, 1, 2] as const;
+
+function roundedDirectionValue(value: number): number {
+  const rounded = Math.round(value * 1e8) / 1e8;
+  return Math.abs(rounded) < 1e-8 ? 0 : rounded;
+}
+
+function stressDirection(change: number | null | undefined): MacroDirection {
+  if (typeof change !== "number" || !Number.isFinite(change)) return "UNKNOWN";
+  if (change <= -20) return "STRONGLY_IMPROVING";
+  if (change <= -8) return "IMPROVING";
+  if (change < 8) return "NEUTRAL";
+  if (change < 20) return "DETERIORATING";
+  return "STRONGLY_DETERIORATING";
+}
+
+function qualifiedVote(momentum: SourceMomentumInputs["growth"]): MacroDirection {
+  if (!momentum || !Number.isFinite(momentum.commonEligibleWeight) ||
+      momentum.commonEligibleWeight < 0.6 || momentum.commonEligibleWeight > 1 ||
+      !Number.isInteger(momentum.commonEligibleFamilies) || momentum.commonEligibleFamilies < 2) return "UNKNOWN";
+  return stressDirection(momentum.scoreChange);
+}
+
+function leadingBand(score: number): Exclude<MacroDirection, "UNKNOWN"> {
+  if (score <= -1.25) return "STRONGLY_IMPROVING";
+  if (score <= -0.5) return "IMPROVING";
+  if (score < 0.5) return "NEUTRAL";
+  if (score < 1.25) return "DETERIORATING";
+  return "STRONGLY_DETERIORATING";
+}
+
+function breadthAdjustedBand(score: number, values: number[]): Exclude<MacroDirection, "UNKNOWN"> {
+  const deteriorating = values.filter((value) => value > 0);
+  const improving = values.filter((value) => value < 0);
+  if (deteriorating.length >= 2) {
+    return deteriorating.filter((value) => value === 2).length >= 2
+      ? "STRONGLY_DETERIORATING"
+      : DIRECTION_VALUE[leadingBand(score)] >= 1 ? leadingBand(score) : "DETERIORATING";
+  }
+  if (deteriorating.length === 0 && improving.length >= 2) {
+    return improving.filter((value) => value === -2).length >= 2
+      ? "STRONGLY_IMPROVING"
+      : DIRECTION_VALUE[leadingBand(score)] <= -1 ? leadingBand(score) : "IMPROVING";
+  }
+  return leadingBand(score);
+}
+
+function scoreCompletions(votes: Record<"growth" | "labor" | "credit", MacroDirection>): number[][] {
+  const keys = ["growth", "labor", "credit"] as const;
+  const completions: number[][] = [];
+  const visit = (index: number, values: number[]) => {
+    if (index === keys.length) {
+      completions.push(values);
+      return;
+    }
+    const key = keys[index];
+    if (votes[key] === "UNKNOWN") {
+      for (const value of POSSIBLE_VOTES) visit(index + 1, [...values, value]);
+      return;
+    }
+    visit(index + 1, [...values, DIRECTION_VALUE[votes[key] as Exclude<MacroDirection, "UNKNOWN">]]);
+  };
+  visit(0, []);
+  return completions;
+}
+
+function assessLeadingDirection(momentum: SourceMomentumInputs | null | undefined): LeadingDirectionAssessment {
+  const votes = {
+    growth: qualifiedVote(momentum?.growth ?? null),
+    labor: qualifiedVote(momentum?.labor ?? null),
+    credit: qualifiedVote(momentum?.credit ?? null),
+  };
+  const weights = LEADING_WEIGHTS;
+  const knownKeys = (Object.keys(weights) as Array<keyof typeof weights>).filter((key) => votes[key] !== "UNKNOWN");
+  const knownWeight = knownKeys.reduce((total, key) => total + weights[key], 0);
+  const knownValues = knownKeys.map((key) => DIRECTION_VALUE[votes[key] as Exclude<MacroDirection, "UNKNOWN">]);
+  const knownScore = knownKeys.reduce((total, key) => total + weights[key] * DIRECTION_VALUE[votes[key] as Exclude<MacroDirection, "UNKNOWN">], 0);
+  const unknownWeight = 1 - knownWeight;
+  const scoreRange = knownKeys.length > 0
+    ? {
+        lower: roundedDirectionValue(knownScore - 2 * unknownWeight),
+        upper: roundedDirectionValue(knownScore + 2 * unknownWeight),
+      }
+    : null;
+  const weightedScore = knownWeight === 1 ? roundedDirectionValue(knownScore) : null;
+  const dispersion = knownValues.length >= 2 ? Math.max(...knownValues) - Math.min(...knownValues) : null;
+  const canAssessActivity = votes.growth !== "UNKNOWN" && votes.labor !== "UNKNOWN" && knownWeight >= 0.8;
+  const completions = canAssessActivity ? scoreCompletions(votes) : [];
+  const possibleDirections = completions.map((values) => {
+    const score = values[0] * weights.growth + values[1] * weights.labor + values[2] * weights.credit;
+    return breadthAdjustedBand(score, values);
+  });
+  const uniqueDirections = Array.from(new Set(possibleDirections));
+  const direction = canAssessActivity && uniqueDirections.length === 1 ? uniqueDirections[0] : "UNKNOWN";
+  return {
+    direction,
+    weightedScore,
+    scoreRange,
+    dispersion,
+    votes,
+    reason: direction === "UNKNOWN" ? "momentum_comparisons_insufficient_or_non_invariant" : null,
+  };
+}
+
+function assessInflationDirection(deltaPi: number | null): InflationDirectionAssessment {
+  const direction: MacroDirection = typeof deltaPi !== "number" || !Number.isFinite(deltaPi) ? "UNKNOWN"
+    : deltaPi <= -1 ? "STRONGLY_IMPROVING"
+      : deltaPi <= -0.3 ? "IMPROVING"
+        : deltaPi < 0.3 ? "NEUTRAL"
+          : deltaPi < 1 ? "DETERIORATING" : "STRONGLY_DETERIORATING";
+  return { direction, deltaPi: typeof deltaPi === "number" && Number.isFinite(deltaPi) ? deltaPi : null };
+}
+
+function deterioratingVotes(leading: LeadingDirectionAssessment): MacroDirection[] {
+  return [leading.votes.growth, leading.votes.labor, leading.votes.credit]
+    .filter((direction) => direction === "DETERIORATING" || direction === "STRONGLY_DETERIORATING");
+}
+
+function hasNewOrWorsenedCoreTension(current: RegimeTension[], previous: RegimeTension[]): boolean {
+  const priorByCode = new Map(previous.filter((item) => item.scope === "core").map((item) => [item.code, item.severity]));
+  return current.some((item) => item.scope === "core" &&
+    (!priorByCode.has(item.code) || item.severity - (priorByCode.get(item.code) ?? item.severity) >= 25));
+}
+
+function assessTransitionRisk(
+  inputs: RegimeInputs,
+  leading: LeadingDirectionAssessment,
+  sensitivity: RegimeSensitivity | null,
+  tensions: RegimeTension[],
+): TransitionRiskAssessment {
+  const directions = [leading.votes.growth, leading.votes.labor, leading.votes.credit];
+  const deteriorating = deterioratingVotes(leading);
+  const stronglyDeteriorating = deteriorating.filter((direction) => direction === "STRONGLY_DETERIORATING");
+  const elevatedReasons: string[] = [];
+  if (directions.every((direction) => direction === "DETERIORATING" || direction === "STRONGLY_DETERIORATING")) {
+    elevatedReasons.push("three_deteriorating_factors");
+  }
+  if (stronglyDeteriorating.length >= 2) elevatedReasons.push("two_strongly_deteriorating_factors");
+  if (sensitivity?.differentNamedRegime && deteriorating.length >= 2) {
+    elevatedReasons.push("sensitivity_switch_with_deterioration");
+  }
+  if (typeof inputs.native.deltaR === "number" && Number.isFinite(inputs.native.deltaR) &&
+      Math.abs(inputs.native.deltaR) >= 1 && deteriorating.length >= 1) {
+    elevatedReasons.push("rate_shock_with_deterioration");
+  }
+  if (elevatedReasons.length) return { level: "ELEVATED", reasonCodes: elevatedReasons };
+
+  const prior = inputs.priorTensionComparison;
+  const deltaR = inputs.native.deltaR;
+  const deltaTarget = inputs.native.deltaTarget;
+  if (directions.some((direction) => direction === "UNKNOWN") ||
+      typeof deltaR !== "number" || !Number.isFinite(deltaR) ||
+      typeof deltaTarget !== "number" || !Number.isFinite(deltaTarget) ||
+      sensitivity === null || prior?.comparable !== true) {
+    return { level: "UNKNOWN", reasonCodes: ["transition_comparison_unavailable"] };
+  }
+
+  const moderateReasons: string[] = [];
+  if (deteriorating.length >= 2) moderateReasons.push("two_deteriorating_factors");
+  if (sensitivity.differentResolvedRegime) moderateReasons.push("sensitivity_resolved_label_change");
+  if (hasNewOrWorsenedCoreTension(tensions, prior.tensions)) moderateReasons.push("core_tension_new_or_worsened");
+  if ((Math.abs(deltaR) >= 0.5 || Math.abs(deltaTarget) >= 0.5) && deteriorating.length >= 1) {
+    moderateReasons.push("rate_or_target_change_with_deterioration");
+  }
+  return moderateReasons.length
+    ? { level: "MODERATE", reasonCodes: moderateReasons }
+    : { level: "LOW", reasonCodes: [] };
+}
+
 export function evaluateRegime(inputs: RegimeInputs): RegimeAssessment {
   const dataQuality = calculateDataQuality(inputs.qualitySlots);
+  const leadingDirection = assessLeadingDirection(inputs.sourceMomentum);
+  const inflationDirection = assessInflationDirection(inputs.native.deltaPi);
   const unavailableAnchors = ANCHORS.filter((key) => !isClassifiable(inputs.factors[key]));
   const classifiableCount = FACTOR_KEYS.filter((key) => isClassifiable(inputs.factors[key])).length;
   if (unavailableAnchors.length > 0 || classifiableCount < 4) {
@@ -457,12 +654,18 @@ export function evaluateRegime(inputs: RegimeInputs): RegimeAssessment {
       dataQuality,
       regimeClarity: null,
       candidates: [],
-      reasonCodes: unavailableAnchors.map((key) => `anchor_unavailable:${key}`),
+      reasonCodes: Array.from(new Set([
+        ...unavailableAnchors.map((key) => `anchor_unavailable:${key}`),
+        ...(inputs.sourceBlockers ?? []),
+      ])),
       activitySeverity: null,
       sensitivity: null,
       factorReadiness: factorReadiness(inputs),
       ruleDiagnostics: unknownDiagnostics(),
       tensions: [],
+      leadingDirection,
+      inflationDirection,
+      transitionRisk: assessTransitionRisk(inputs, leadingDirection, null, []),
     };
   }
 
@@ -494,6 +697,9 @@ export function evaluateRegime(inputs: RegimeInputs): RegimeAssessment {
       factorReadiness: factorReadiness(inputs),
       ruleDiagnostics: diagnostics(outcomes, baseSupport, computedSupport),
       tensions,
+      leadingDirection,
+      inflationDirection,
+      transitionRisk: assessTransitionRisk(inputs, leadingDirection, null, tensions),
     };
   }
 
@@ -545,5 +751,8 @@ export function evaluateRegime(inputs: RegimeInputs): RegimeAssessment {
     factorReadiness: factorReadiness(inputs),
     ruleDiagnostics: ruleDiagnosticsResult,
     tensions,
+    leadingDirection,
+    inflationDirection,
+    transitionRisk: assessTransitionRisk(inputs, leadingDirection, sensitivity, tensions),
   };
 }

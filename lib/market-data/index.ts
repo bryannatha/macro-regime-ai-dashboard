@@ -17,7 +17,7 @@ import { fetchFedBroadDollar } from "./providers/fed";
 import { fetchFrankfurterUsdIdr } from "./providers/frankfurter";
 import { fetchMempoolDemand } from "./providers/mempool";
 import { fetchTreasuryYields } from "./providers/treasury";
-import { createUnconfiguredRegimeInputs } from "./regime-inputs";
+import { createUnconfiguredRegimeInputs, TREASURY_POLICY_BLOCKER } from "./regime-inputs";
 
 export interface DashboardOptions extends AdapterOptions {
   eiaApiKey?: string;
@@ -193,15 +193,22 @@ export async function getDashboardPayload(options: DashboardOptions = {}): Promi
   );
   const scores = calculateScores(observations);
   // Current public feeds are monitoring proxies, not the registered two-family core-factor inputs.
-  const regime = evaluateRegime(createUnconfiguredRegimeInputs());
+  const sourceRegistry = getSourceRegistry();
+  const sourceBlockers = sourceRegistry.some((source) =>
+    source.id === "treasury-real-yield" && source.sourceHealth === "REDISTRIBUTION_BLOCKED")
+    ? [TREASURY_POLICY_BLOCKER]
+    : [];
+  const regime = evaluateRegime(createUnconfiguredRegimeInputs(sourceBlockers));
 
   return {
     generatedAt,
     dataAsOf: dates.sort().at(-1) ?? null,
-    sourceRegistry: getSourceRegistry(),
+    sourceRegistry,
     observations,
     scores,
     regime,
-    researchImplications: regime.regime ? getResearchImplications(regime.regime) : null,
+    researchImplications: regime.assessmentStatus === "NORMAL" && regime.regime
+      ? getResearchImplications(regime.regime)
+      : null,
   };
 }

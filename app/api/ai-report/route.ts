@@ -26,6 +26,11 @@ function summaryFor(
   coverage: string,
   researchThemes: string[],
 ): string {
+  const directionSummary = [
+    `Leading Direction: ${assessment.leadingDirection.direction} (observed momentum; lead timing not validated).`,
+    `Inflation Direction: ${assessment.inflationDirection.direction}.`,
+    `Transition Risk: ${assessment.transitionRisk.level} (instability/proximity, not probability).`,
+  ].join(" ");
   if (assessment.regime) {
     return [
       assessment.regime === "INFLATIONARY_EXPANSION"
@@ -34,13 +39,14 @@ function summaryFor(
       ...researchThemes,
       `Assessment status: ${assessment.assessmentStatus}. Data Quality: ${assessment.dataQuality ?? "not calculated"}/100; Regime Clarity: ${assessment.regimeClarity ?? "not calculated"}/100.`,
       `Core factor evidence: ${coverage}.`,
+      directionSummary,
     ].join(" ");
   }
   const unavailable = assessment.reasonCodes.length
     ? assessment.reasonCodes.join(", ")
     : "required core inputs are unavailable";
   const signalBrief = signals.map((signal) => `${signal.label} ${signal.score}/100`).join(", ");
-  return `Regime withheld (${assessment.assessmentStatus}) because the six-factor core input contract is not met. ${unavailable}. Core factors: ${coverage}. The five dashboard scores are monitoring indicators and are not substitutes for these regime inputs. Missing inputs are not treated as zero. Available monitoring indicators: ${signalBrief || "none"}.`;
+  return `Regime withheld (${assessment.assessmentStatus}) because the six-factor core input contract is not met. ${unavailable}. Core factors: ${coverage}. ${directionSummary} The five dashboard scores are monitoring indicators and are not substitutes for these regime inputs. Missing inputs are not treated as zero. Available monitoring indicators: ${signalBrief || "none"}.`;
 }
 
 export async function GET() {
@@ -54,7 +60,9 @@ export async function GET() {
   );
   const coverage = coverageLine(payload.regime);
   const regime = payload.regime.regime;
-  const researchImplications = payload.researchImplications;
+  const researchImplications = payload.regime.assessmentStatus === "NORMAL"
+    ? payload.researchImplications
+    : null;
   const executiveSummary = summaryFor(
     payload.regime,
     availableSignals,
@@ -77,6 +85,9 @@ export async function GET() {
     assessmentStatus: payload.regime.assessmentStatus,
     dataQuality: payload.regime.dataQuality,
     regimeClarity: payload.regime.regimeClarity,
+    leadingDirection: payload.regime.leadingDirection,
+    inflationDirection: payload.regime.inflationDirection,
+    transitionRisk: payload.regime.transitionRisk,
     executiveSummary,
     signals,
     watchlist,

@@ -146,7 +146,10 @@ describe("approved anchor family aggregation", () => {
     expect(inputs.factors.policyRates.bounds?.lower).toBeCloseTo(35.9375, 6);
     expect(inputs.factors.policyRates.bounds?.upper).toBeCloseTo(85.9375, 6);
     expect(inputs.qualitySlots.reduce((sum, slot) => sum + slot.weight, 0)).toBeCloseTo(1, 10);
-    expect(evaluateRegime(inputs)).toMatchObject({ assessmentStatus: "INSUFFICIENT_DATA", regime: null });
+    const assessment = evaluateRegime(inputs);
+    expect(assessment).toMatchObject({ assessmentStatus: "INSUFFICIENT_DATA", regime: null });
+    expect(assessment.reasonCodes).toContain("POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED");
+    expect(assessment.leadingDirection.direction).toBe("UNKNOWN");
   });
 
   it("does not substitute headline PCE when the registered core-PCE series is missing", () => {

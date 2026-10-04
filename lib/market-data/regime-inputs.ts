@@ -2,6 +2,8 @@ import type { RegimeFactorInput, RegimeFactorKey, RegimeInputs } from "@/lib/typ
 import type { CoreFactorsResult } from "./types";
 import { toQualitySlots, toRegimeFactorInputs } from "./core-factors";
 
+export const TREASURY_POLICY_BLOCKER = "POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED";
+
 const factorKeys: RegimeFactorKey[] = [
   "inflation",
   "growth",
@@ -21,7 +23,7 @@ function unavailableFactor(): RegimeFactorInput {
   };
 }
 
-export function createUnconfiguredRegimeInputs(): RegimeInputs {
+export function createUnconfiguredRegimeInputs(sourceBlockers: string[] = []): RegimeInputs {
   return {
     factors: Object.fromEntries(factorKeys.map((key) => [key, unavailableFactor()])) as RegimeInputs["factors"],
     native: {
@@ -45,13 +47,24 @@ export function createUnconfiguredRegimeInputs(): RegimeInputs {
       release: 0,
       fetchHealth: 0,
     })),
+    sourceMomentum: null,
+    priorTensionComparison: null,
+    sourceBlockers: [...sourceBlockers],
   };
 }
 
 export function createRegimeInputsFromCoreFactors(core: CoreFactorsResult): RegimeInputs {
+  const treasuryReuseBlocked = core.factors.policyRates.families
+    .filter((item) => item.key === "realFinancing")
+    .flatMap((item) => item.slots)
+    .some((item) => item.sourceIds.includes("treasury-real-yield") &&
+      item.reason?.toLowerCase().includes("redistribution is blocked"));
   return {
     factors: toRegimeFactorInputs(core.factors),
     native: core.native,
     qualitySlots: toQualitySlots(core.factors),
+    sourceMomentum: null,
+    priorTensionComparison: null,
+    sourceBlockers: treasuryReuseBlocked ? [TREASURY_POLICY_BLOCKER] : [],
   };
 }

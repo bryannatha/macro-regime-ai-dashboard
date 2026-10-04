@@ -57,6 +57,10 @@ describe("getDashboardPayload", () => {
       dataQuality: 0,
       regimeClarity: null,
     });
+    expect(payload.regime.reasonCodes).toContain("POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED");
+    expect(payload.regime.leadingDirection.direction).toBe("UNKNOWN");
+    expect(payload.regime.inflationDirection.direction).toBe("UNKNOWN");
+    expect(payload.regime.transitionRisk.level).toBe("UNKNOWN");
     expect(payload.researchImplications).toBeNull();
     expect(Object.values(payload.regime.factorReadiness).every((factor) => !factor.classifiable)).toBe(true);
     expect(payload.sourceRegistry.find((entry) => entry.id === "treasury-real-yield")).toMatchObject({
