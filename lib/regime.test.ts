@@ -212,6 +212,21 @@ describe("US macro regime v0.3", () => {
     expect(result.reasonCodes).toContain("anchor_unavailable:growth");
   });
 
+  it("keeps Policy/Rates unclassifiable with one eligible family even when its partial bound is informative", () => {
+    const input = inputs();
+    input.factors.policyRates = family(72, {
+      bounds: { lower: 36, upper: 86 },
+      coverage: 0.5,
+      eligibleFamilies: 1,
+    });
+    const result = evaluateRegime(input);
+
+    expect(result.assessmentStatus).toBe("INSUFFICIENT_DATA");
+    expect(result.regime).toBeNull();
+    expect(result.factorReadiness.policyRates).toMatchObject({ coverage: 0.5, eligibleFamilies: 1, classifiable: false });
+    expect(result.reasonCodes).toContain("anchor_unavailable:policyRates");
+  });
+
   it("keeps the fixed quality denominator when a slot is removed", () => {
     const slots = inputs().qualitySlots;
     const full = calculateDataQuality(slots);

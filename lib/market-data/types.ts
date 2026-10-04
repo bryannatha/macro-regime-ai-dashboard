@@ -1,5 +1,8 @@
 import type {
   QualitySlotInput,
+  RegimeFactorKey,
+  RegimeNativeInputs,
+  ScoreBounds,
   SourceHistoryStatus,
   SourceParserStatus,
   SourceState,
@@ -51,6 +54,92 @@ export interface CoreObservationSeriesResult {
   historyStatus: SourceHistoryStatus;
   retrievedAt: string | null;
   reason: string | null;
+}
+
+export interface SeriesExpectation {
+  sourceId: string;
+  identifier: string;
+  unit: string;
+  seasonalBasis: string;
+  cadence: "daily" | "monthly" | "quarterly" | "weekly";
+}
+
+export interface CoreTransformResult {
+  value: number | null;
+  score: number | null;
+  unit: string;
+  observedAt: string | null;
+  sourceIds: string[];
+  identifiers: string[];
+  dependencyIds: string[];
+  observations: CoreSourceObservation[];
+  historyPoints: number;
+  historyYears: number | null;
+  releaseQuality: number | null;
+  reason: string | null;
+}
+
+export type CoreReadinessStatus = "READY" | "ADEQUATE" | "LIMITED" | "WITHHELD";
+
+export interface CoreSlotQuality {
+  eligible: boolean;
+  freshness: number;
+  history: number;
+  release: number;
+  fetchHealth: number;
+}
+
+export interface CoreFactorSlot {
+  key: string;
+  weight: number;
+  value: number | null;
+  score: number | null;
+  unit: string;
+  eligible: boolean;
+  observedAt: string | null;
+  sourceIds: string[];
+  identifiers: string[];
+  dependencyIds: string[];
+  historyPoints: number;
+  historyYears: number | null;
+  releaseQuality: number | null;
+  quality: CoreSlotQuality;
+  reason: string | null;
+}
+
+export interface CoreMeasurementFamily {
+  key: string;
+  factor: RegimeFactorKey;
+  weight: number;
+  score: number | null;
+  coverage: number;
+  bounds: ScoreBounds;
+  eligible: boolean;
+  status: CoreReadinessStatus;
+  slots: CoreFactorSlot[];
+  sourceIds: string[];
+  identifiers: string[];
+  dependencyIds: string[];
+  reason: string | null;
+}
+
+export interface CoreFactorAssessment {
+  key: RegimeFactorKey;
+  score: number | null;
+  coverage: number;
+  bounds: ScoreBounds;
+  eligibleFamilies: number;
+  configuredFamilies: number;
+  historyYears: number | null;
+  releaseQuality: number;
+  status: CoreReadinessStatus;
+  families: CoreMeasurementFamily[];
+}
+
+export interface CoreFactorsResult {
+  factors: Record<RegimeFactorKey, CoreFactorAssessment>;
+  native: RegimeNativeInputs;
+  momentum: Record<string, CoreTransformResult>;
 }
 
 export interface ValidatedObservationCacheEntry {

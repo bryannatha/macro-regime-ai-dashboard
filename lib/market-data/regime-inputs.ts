@@ -1,4 +1,6 @@
 import type { RegimeFactorInput, RegimeFactorKey, RegimeInputs } from "@/lib/types";
+import type { CoreFactorsResult } from "./types";
+import { toQualitySlots, toRegimeFactorInputs } from "./core-factors";
 
 const factorKeys: RegimeFactorKey[] = [
   "inflation",
@@ -43,5 +45,13 @@ export function createUnconfiguredRegimeInputs(): RegimeInputs {
       release: 0,
       fetchHealth: 0,
     })),
+  };
+}
+
+export function createRegimeInputsFromCoreFactors(core: CoreFactorsResult): RegimeInputs {
+  return {
+    factors: toRegimeFactorInputs(core.factors),
+    native: core.native,
+    qualitySlots: toQualitySlots(core.factors),
   };
 }

@@ -85,7 +85,10 @@ function makeBeaSection2() {
       "Table 2.8.4. Price Indexes for Personal Consumption Expenditures by Major Type of Product, Monthly",
       "[Index numbers, 2017=100; seasonally adjusted]",
       periods,
-      [["1", "Personal consumption expenditures (PCE)", "DPCERG", values]],
+      [
+        ["1", "Personal consumption expenditures (PCE)", "DPCERG", values],
+        ["25", "PCE excluding food and energy", "DPCCRG", values.map((value) => value + 5)],
+      ],
     ),
     beaSheet(
       "T20806-M",
@@ -171,11 +174,12 @@ describe("official anchor source adapters", () => {
     });
     expect(source("bea-pce-income")?.identifiers).toEqual([
       "T20804-M / DPCERG",
+      "T20804-M / DPCCRG",
       "T20806-M / DPCERX",
       "T20600-M / A067RX",
     ]);
     expect(source("bea-pce-income")?.firstUsablePeriod)
-      .toBe("DPCERG: 1959M01; DPCERX: 2007M01; A067RX: 1959M01");
+      .toBe("DPCERG: 1959M01; DPCCRG: 1959M01; DPCERX: 2007M01; A067RX: 1959M01");
     expect(source("federal-reserve-g17-ip")?.identifiers).toEqual(["B50001"]);
     expect(source("dol-initial-claims")?.attribution).toContain("U.S. Department of Labor");
     expect(source("treasury-real-yield")).toMatchObject({ sourceHealth: "REDISTRIBUTION_BLOCKED", reuseStatus: "UNRESOLVED" });
@@ -274,10 +278,11 @@ describe("official anchor source adapters", () => {
     expect(growth.observations.at(-2)).toMatchObject({ releasedAt: null, vintage: null });
   });
 
-  it("selects BEA real disposable income, not nominal income, and validates table and row identity", () => {
+  it("selects BEA core PCE and real disposable income from exact rows, not headline PCE or nominal income", () => {
     const results = parseBeaSection2Sheets(makeBeaSection2(), retrievedAt) as SeriesResult[];
     const income = byId(results, "T20600-M / A067RX");
     const pcePrice = byId(results, "T20804-M / DPCERG");
+    const corePce = byId(results, "T20804-M / DPCCRG");
     const realPce = byId(results, "T20806-M / DPCERX");
 
     expect(income).toMatchObject({ state: "AVAILABLE", parserStatus: "VERIFIED", historyStatus: "VERIFIED" });
@@ -289,7 +294,22 @@ describe("official anchor source adapters", () => {
       releasedAt: "2026-09-30",
     });
     expect(pcePrice.observations.at(-1)).toMatchObject({ unit: "index (2017=100)", seasonalBasis: "SA" });
+    expect(corePce).toMatchObject({ state: "AVAILABLE", parserStatus: "VERIFIED", historyStatus: "VERIFIED" });
+    expect(corePce.observations.at(-1)).toMatchObject({
+      value: 118.9,
+      identifier: "T20804-M / DPCCRG",
+      unit: "index (2017=100)",
+      seasonalBasis: "SA",
+    });
     expect(realPce.observations.at(-1)).toMatchObject({ unit: "millions of chained (2017) dollars (SAAR)", seasonalBasis: "SAAR" });
+
+    const noCorePce = makeBeaSection2();
+    const pceSheet = noCorePce.find((sheet) => sheet.sheet === "T20804-M")!;
+    pceSheet.data = pceSheet.data.filter((row) => row[2] !== "DPCCRG");
+    expect(byId(parseBeaSection2Sheets(noCorePce, retrievedAt) as SeriesResult[], "T20804-M / DPCCRG")).toMatchObject({
+      state: "MISSING",
+      observations: [],
+    });
 
     const nominalOnly = makeBeaSection2();
     const incomeSheet = nominalOnly.find((sheet) => sheet.sheet === "T20600-M")!;
