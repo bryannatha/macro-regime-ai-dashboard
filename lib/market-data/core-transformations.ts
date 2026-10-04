@@ -21,6 +21,21 @@ export const CORE_SCORE_ANCHORS = {
 
 type ValidatedSeries = { observations: CoreSourceObservation[]; points: number[] };
 
+const REAL_M2_EXPECTATION: SeriesExpectation = {
+  sourceId: "federal-reserve-h6-m2",
+  identifier: "M2.M",
+  unit: "billions USD",
+  seasonalBasis: "SA",
+  cadence: "monthly",
+};
+const HEADLINE_PCE_EXPECTATION: SeriesExpectation = {
+  sourceId: "bea-pce-income",
+  identifier: "T20804-M / DPCERG",
+  unit: "index (2017=100)",
+  seasonalBasis: "SA",
+  cadence: "monthly",
+};
+
 function unavailable(reason: string, unit = ""): CoreTransformResult {
   return {
     value: null,
@@ -235,4 +250,108 @@ export function transformClaimsIntensity(
   const value = (meanClaims / latestPayroll.value) * 1000;
   const historyPoints = Math.min(claimsData.points.length, payrollData.points.length * 4);
   return result(value, anchors, "claims per 1,000 employed", [...latestClaims, latestPayroll], historyPoints, historyPoints / 52);
+}
+
+export function transformCreditStandards(
+  series: CoreObservationSeriesResult | null | undefined,
+  identifier: string,
+): CoreTransformResult {
+  const expectation: SeriesExpectation = {
+    sourceId: "federal-reserve-sloos",
+    identifier,
+    unit: "percent net",
+    seasonalBasis: "Not seasonally adjusted",
+    cadence: "quarterly",
+  };
+  const validated = validateSeries(series, expectation);
+  if (!validated) return unavailable("The SLOOS series, borrower size, units, basis, or survey-period continuity did not match.", "percent net");
+  const { observations, points } = validated;
+  if (points.length < 4 || points.some((value) => value < -100 || value > 100)) return missingHistory("percent net");
+  const latest = points.at(-1)!;
+  const mean4 = points.slice(-4).reduce((sum, value) => sum + value, 0) / 4;
+  const latestScore = interpolateStress(latest, CORE_SCORE_ANCHORS.creditStandards);
+  const meanScore = interpolateStress(mean4, CORE_SCORE_ANCHORS.creditStandards);
+  if (latestScore === null || meanScore === null) return unavailable("SLOOS values could not be interpolated against the approved anchors.", "percent net");
+  const metric = result(latest, CORE_SCORE_ANCHORS.creditStandards, "percent net", observations.slice(-4), 4, 1);
+  return { ...metric, score: 0.6 * latestScore + 0.4 * meanScore };
+}
+
+export function transformCreditVolume(
+  series: CoreObservationSeriesResult | null | undefined,
+): CoreTransformResult {
+  const expectation: SeriesExpectation = {
+    sourceId: "federal-reserve-h8",
+    identifier: "H.8 Table 2 line 9 / Loans and leases in bank credit",
+    unit: "billions USD",
+    seasonalBasis: "SA",
+    cadence: "weekly",
+  };
+  const validated = validateSeries(series, expectation);
+  if (!validated) return unavailable("The H.8 series, units, seasonal basis, or weekly continuity did not match.", "percent annualized");
+  const { observations, points } = validated;
+  if (points.length < 17 || points.some((value) => value <= 0)) return missingHistory("percent annualized");
+  const currentMean = points.slice(-4).reduce((sum, value) => sum + value, 0) / 4;
+  const priorMean = points.slice(-17, -13).reduce((sum, value) => sum + value, 0) / 4;
+  if (priorMean <= 0) return unavailable("The H.8 comparison-period loan balance was not positive.", "percent annualized");
+  const value = 100 * ((currentMean / priorMean) ** 4 - 1);
+  return result(value, CORE_SCORE_ANCHORS.creditVolume, "percent annualized", observations.slice(-17), 17, 17 / 52);
+}
+
+export function transformLiquidityProxy(
+  fedAssets: CoreObservationSeriesResult | null | undefined,
+  treasuryAccount: CoreObservationSeriesResult | null | undefined,
+  reverseRepoOthers: CoreObservationSeriesResult | null | undefined,
+): CoreTransformResult {
+  const specs: SeriesExpectation[] = [
+    { sourceId: "federal-reserve-h41-liquidity", identifier: "H.4.1 Table 1 / Total assets / weekly average", unit: "millions USD", seasonalBasis: "weekly average", cadence: "weekly" },
+    { sourceId: "federal-reserve-h41-liquidity", identifier: "H.4.1 Table 1 / U.S. Treasury, General Account / weekly average", unit: "millions USD", seasonalBasis: "weekly average", cadence: "weekly" },
+    { sourceId: "federal-reserve-h41-liquidity", identifier: "H.4.1 Table 1 / Reverse repurchase agreements: Others / weekly average", unit: "millions USD", seasonalBasis: "weekly average", cadence: "weekly" },
+  ];
+  const inputs = [fedAssets, treasuryAccount, reverseRepoOthers];
+  const validated = inputs.map((input, index) => validateSeries(input, specs[index]));
+  if (validated.some((item) => item === null)) return unavailable("H.4.1 total assets, TGA, and RRP Others must be available with the same weekly-average basis.", "percent change over 13 weeks");
+  const [assets, tga, rrp] = validated as [ValidatedSeries, ValidatedSeries, ValidatedSeries];
+  if (assets.observations.length < 14 || assets.observations.length !== tga.observations.length || assets.observations.length !== rrp.observations.length) {
+    return missingHistory("percent change over 13 weeks");
+  }
+  const sameWeeks = assets.observations.every((item, index) =>
+    item.observedAt === tga.observations[index].observedAt && item.observedAt === rrp.observations[index].observedAt);
+  if (!sameWeeks) return unavailable("H.4.1 weekly-average components did not share the exact same observation weeks.", "percent change over 13 weeks");
+  const liquidity = assets.points.map((value, index) => value - tga.points[index] - rrp.points[index]);
+  const latest = liquidity.at(-1)!;
+  const prior = liquidity.at(-14)!;
+  if (liquidity.some((value) => value <= 0) || prior <= 0) return unavailable("The H.4.1 balance-sheet proxy or its 13-week comparison was not positive.", "percent change over 13 weeks");
+  const change = 100 * (latest / prior - 1);
+  return result(change, CORE_SCORE_ANCHORS.liquidityBalance, "percent change over 13 weeks", [
+    ...assets.observations.slice(-14), ...tga.observations.slice(-14), ...rrp.observations.slice(-14),
+  ], 14, 14 / 52);
+}
+
+export function transformRealM2(
+  m2: CoreObservationSeriesResult | null | undefined,
+  headlinePce: CoreObservationSeriesResult | null | undefined,
+): CoreTransformResult {
+  const m2Data = validateSeries(m2, REAL_M2_EXPECTATION);
+  const pceData = validateSeries(headlinePce, HEADLINE_PCE_EXPECTATION);
+  if (!m2Data || !pceData) return unavailable("Real M2 requires the approved monthly SA M2.M and matched BEA headline-PCE index series.", "percent annualized");
+
+  const pceByMonth = new Map(pceData.observations.map((item) => [item.observedAt, item]));
+  const matched = m2Data.observations.flatMap((m2Observation) => {
+    const pceObservation = pceByMonth.get(m2Observation.observedAt);
+    return pceObservation ? [{ m2Observation, pceObservation, ratio: m2Observation.value / pceObservation.value }] : [];
+  });
+  if (matched.length < 6 || matched.slice(-6).some(({ m2Observation, pceObservation }) =>
+    m2Observation.value <= 0 || pceObservation.value <= 0)) return missingHistory("percent annualized");
+  const lastSix = matched.slice(-6);
+  const monthSerial = (date: string) => Number(date.slice(0, 4)) * 12 + Number(date.slice(5, 7));
+  if (lastSix.some((item, index) => index > 0 && monthSerial(item.m2Observation.observedAt) !== monthSerial(lastSix[index - 1].m2Observation.observedAt) + 1)) {
+    return unavailable("Real-M2 inputs did not contain six matched consecutive months.", "percent annualized");
+  }
+  const mean = (start: number) => lastSix.slice(start, start + 3).reduce((sum, item) => sum + item.ratio, 0) / 3;
+  const priorMean = mean(0);
+  const currentMean = mean(3);
+  if (priorMean <= 0) return unavailable("The matched real-M2 comparison period was not positive.", "percent annualized");
+  const value = 100 * ((currentMean / priorMean) ** 4 - 1);
+  const sourceObservations = lastSix.flatMap(({ m2Observation, pceObservation }) => [m2Observation, pceObservation]);
+  return result(value, CORE_SCORE_ANCHORS.realM2, "percent annualized", sourceObservations, 6, 0.5);
 }

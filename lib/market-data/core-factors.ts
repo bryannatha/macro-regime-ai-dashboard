@@ -14,9 +14,13 @@ import {
   interpolateStress,
   transformAnnualized3m,
   transformClaimsIntensity,
+  transformCreditStandards,
+  transformCreditVolume,
   transformG3,
+  transformLiquidityProxy,
   transformLatestLevel,
   transformPublishedGDP,
+  transformRealM2,
   transformUnemploymentGap,
   transformYoY,
 } from "./core-transformations";
@@ -36,6 +40,15 @@ const UNEMPLOYMENT: SeriesExpectation = { sourceId: "bls-labor", identifier: "LN
 const CLAIMS: SeriesExpectation = { sourceId: "dol-initial-claims", identifier: "U.S. initial claims, seasonally adjusted (InitialClaims.SA)", unit: "thousand claims", seasonalBasis: "SA", cadence: "weekly" };
 const POLICY: SeriesExpectation = { sourceId: "federal-reserve-policy-actions", identifier: "FOMC target range/action history", unit: "percent", seasonalBasis: "Not seasonally adjusted", cadence: "daily" };
 const TREASURY_REAL: SeriesExpectation = { sourceId: "treasury-real-yield", identifier: "TC_10YEAR", unit: "percent", seasonalBasis: "Not seasonally adjusted", cadence: "daily" };
+const H41_ASSETS: SeriesExpectation = { sourceId: "federal-reserve-h41-liquidity", identifier: "H.4.1 Table 1 / Total assets / weekly average", unit: "millions USD", seasonalBasis: "weekly average", cadence: "weekly" };
+const H41_TGA: SeriesExpectation = { sourceId: "federal-reserve-h41-liquidity", identifier: "H.4.1 Table 1 / U.S. Treasury, General Account / weekly average", unit: "millions USD", seasonalBasis: "weekly average", cadence: "weekly" };
+const H41_RRP_OTHERS: SeriesExpectation = { sourceId: "federal-reserve-h41-liquidity", identifier: "H.4.1 Table 1 / Reverse repurchase agreements: Others / weekly average", unit: "millions USD", seasonalBasis: "weekly average", cadence: "weekly" };
+const H6_M2: SeriesExpectation = { sourceId: "federal-reserve-h6-m2", identifier: "M2.M", unit: "billions USD", seasonalBasis: "SA", cadence: "monthly" };
+const SLOOS_LARGE_MEDIUM = "Figure 1 Panel 1 / Large and medium";
+const SLOOS_SMALL = "Figure 1 Panel 1 / Small";
+const H8_LOANS: SeriesExpectation = { sourceId: "federal-reserve-h8", identifier: "H.8 Table 2 line 9 / Loans and leases in bank credit", unit: "billions USD", seasonalBasis: "SA", cadence: "weekly" };
+const DELINQUENCY: SeriesExpectation = { sourceId: "federal-reserve-credit-performance", identifier: "STFBQD%STFBAIL_XEOP_MA.Q", unit: "percent", seasonalBasis: "SA", cadence: "quarterly" };
+const CHARGE_OFF: SeriesExpectation = { sourceId: "federal-reserve-credit-performance", identifier: "STFBQC%STFBAIL_MA.Q", unit: "percent", seasonalBasis: "SA", cadence: "quarterly" };
 
 type SlotDefinition = { key: string; weight: number; targetHistory: number; metric: CoreTransformResult };
 
@@ -310,14 +323,37 @@ export function buildCoreFactors(sources: CoreObservationSeriesResult[], asOf: s
     scoreFamily("policyRates", "realFinancing", 0.5, realFinancing, 2520),
   ];
 
+  const creditStandardsLarge = transformCreditStandards(bySource(sources, { sourceId: "federal-reserve-sloos", identifier: SLOOS_LARGE_MEDIUM, unit: "percent net", seasonalBasis: "Not seasonally adjusted", cadence: "quarterly" }, timestamp), SLOOS_LARGE_MEDIUM);
+  const creditStandardsSmall = transformCreditStandards(bySource(sources, { sourceId: "federal-reserve-sloos", identifier: SLOOS_SMALL, unit: "percent net", seasonalBasis: "Not seasonally adjusted", cadence: "quarterly" }, timestamp), SLOOS_SMALL);
+  const creditVolume = transformCreditVolume(bySource(sources, H8_LOANS, timestamp));
+  const delinquency = levelMetric(bySource(sources, DELINQUENCY, timestamp), DELINQUENCY, CORE_SCORE_ANCHORS.delinquency);
+  const chargeOff = levelMetric(bySource(sources, CHARGE_OFF, timestamp), CHARGE_OFF, CORE_SCORE_ANCHORS.chargeOff);
   const creditFamilies = [
-    unavailableFamily("creditConditions", "standards", 0.4, [["domesticCiStandards", 1, 40]], "Approved SLOOS transformation is pending Task 5."),
-    unavailableFamily("creditConditions", "bankVolume", 0.3, [["bankLoanGrowth", 1, 520]], "Approved H.8 transformation is pending Task 5."),
-    unavailableFamily("creditConditions", "performance", 0.3, [["delinquency", 0.5, 40], ["netChargeOff", 0.5, 40]], "Approved credit-performance transformations are pending Task 5."),
+    family("creditConditions", "standards", 0.4, [
+      slotDefinition("largeAndMedium", 0.5, creditStandardsLarge, 40),
+      slotDefinition("small", 0.5, creditStandardsSmall, 40),
+    ], []),
+    scoreFamily("creditConditions", "bankVolume", 0.3, creditVolume, 520),
+    family("creditConditions", "performance", 0.3, [
+      slotDefinition("delinquency", 0.5, delinquency, 40),
+      slotDefinition("netChargeOff", 0.5, chargeOff, 40),
+    ], []),
   ];
+  const balanceSheetProxy = transformLiquidityProxy(
+    bySource(sources, H41_ASSETS, timestamp),
+    bySource(sources, H41_TGA, timestamp),
+    bySource(sources, H41_RRP_OTHERS, timestamp),
+  );
+  if (balanceSheetProxy.score === null) {
+    balanceSheetProxy.sourceIds = [H41_ASSETS.sourceId];
+    balanceSheetProxy.identifiers = [H41_ASSETS.identifier, H41_TGA.identifier, H41_RRP_OTHERS.identifier];
+    balanceSheetProxy.dependencyIds = [H41_ASSETS, H41_TGA, H41_RRP_OTHERS].map(({ sourceId, identifier }) => `${sourceId}:${identifier}`);
+    balanceSheetProxy.reason = "H.4.1 does not publish total assets on the weekly-average basis required by the approved LP equation.";
+  }
+  const realM2 = transformRealM2(bySource(sources, H6_M2, timestamp), bySource(sources, PCE_HEADLINE, timestamp));
   const liquidityFamilies = [
-    unavailableFamily("liquidityProxy", "balanceSheetProxy", 0.5, [["balanceSheetProxy13w", 1, 520]], "Approved H.4.1 balance-sheet proxy transformation is pending Task 5."),
-    unavailableFamily("liquidityProxy", "realM2", 0.5, [["realM2G3", 1, 120]], "Approved real-M2 transformation is pending Task 5."),
+    scoreFamily("liquidityProxy", "balanceSheetProxy", 0.5, balanceSheetProxy, 520),
+    scoreFamily("liquidityProxy", "realM2", 0.5, realM2, 120),
   ];
 
   const factors: Record<RegimeFactorKey, CoreFactorAssessment> = {
@@ -354,6 +390,13 @@ export function buildCoreFactors(sources: CoreObservationSeriesResult[], asOf: s
       payrollG3: payrollGrowth,
       unemploymentGap,
       claimsIntensity,
+      realM2,
+      balanceSheetProxy,
+      creditStandardsLarge,
+      creditStandardsSmall,
+      creditVolume,
+      delinquency,
+      chargeOff,
     },
   };
 }
