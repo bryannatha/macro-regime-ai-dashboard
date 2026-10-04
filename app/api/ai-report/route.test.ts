@@ -10,11 +10,11 @@ import { createUnconfiguredRegimeInputs } from "@/lib/market-data/regime-inputs"
 import { GET } from "./route";
 
 const scores: CategoryScore[] = [
-  { key: "inflationPressure", label: "Inflation pressure indicator", score: 42, coverage: 1, coveragePercent: 100, orientation: "risk", reading: "Watch", summary: "CPI monitoring proxy.", explanation: "Indicator only." },
-  { key: "growthStress", label: "Growth stress indicator", score: 38, coverage: 0.65, coveragePercent: 65, orientation: "risk", reading: "Contained", summary: "Claims monitoring proxy.", explanation: "Indicator only." },
-  { key: "liquidity", label: "Liquidity indicator", score: 66, coverage: 1, coveragePercent: 100, orientation: "support", reading: "Strong", summary: "Broad dollar and real yield monitoring proxy.", explanation: "Indicator only." },
-  { key: "cryptoDemand", label: "Crypto blockspace indicator", score: 59, coverage: 1, coveragePercent: 100, orientation: "demand", reading: "Building", summary: "Blockspace proxy, not buying pressure.", explanation: "Indicator only." },
-  { key: "indonesiaRisk", label: "Indonesia FX risk indicator", score: 54, coverage: 0.75, coveragePercent: 75, orientation: "risk", reading: "Watch", summary: "ECB-derived USD/IDR cross.", explanation: "Indicator only." },
+  { key: "inflationPressure", label: "Inflation pressure", score: 42, coverage: 1, coveragePercent: 100, orientation: "risk", reading: "Watch", summary: "CPI monitoring proxy.", explanation: "Indicator only." },
+  { key: "growthStress", label: "Growth stress", score: 38, coverage: 0.65, coveragePercent: 65, orientation: "risk", reading: "Contained", summary: "Claims monitoring proxy.", explanation: "Indicator only." },
+  { key: "liquidity", label: "Legacy Liquidity Monitor", score: 66, coverage: 1, coveragePercent: 100, orientation: "support", reading: "Strong", summary: "Broad dollar and real yield monitoring proxy.", explanation: "Indicator only." },
+  { key: "cryptoDemand", label: "Bitcoin Blockspace Activity", score: 59, coverage: 1, coveragePercent: 100, orientation: "demand", reading: "Building", summary: "Blockspace proxy, not buying pressure.", explanation: "Indicator only." },
+  { key: "indonesiaRisk", label: "Indonesia risk", score: 54, coverage: 0.75, coveragePercent: 75, orientation: "risk", reading: "Watch", summary: "ECB-derived USD/IDR cross.", explanation: "Indicator only." },
 ];
 
 const emptyRegime = evaluateRegime(createUnconfiguredRegimeInputs());

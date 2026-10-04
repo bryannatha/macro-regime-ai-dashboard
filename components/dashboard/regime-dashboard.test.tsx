@@ -40,12 +40,12 @@ const labels: Record<ObservationKey, string> = {
 const scores: CategoryScore[] = [
   ["inflationPressure", "Inflation pressure", 48, "risk"],
   ["growthStress", "Growth stress", null, "risk"],
-  ["liquidity", "Liquidity", 64, "support"],
-  ["cryptoDemand", "Crypto demand", 58, "demand"],
+  ["liquidity", "Legacy Liquidity Monitor", 64, "support"],
+  ["cryptoDemand", "Bitcoin Blockspace Activity", 58, "demand"],
   ["indonesiaRisk", "Indonesia risk", 51, "risk"],
 ].map(([key, label, score, orientation]) => ({
   key: key as ScoreKey,
-  label: label as string,
+  label: label as CategoryScore["label"],
   score: score as number | null,
   coverage: score === null ? 0.35 : 1,
   coveragePercent: score === null ? 35 : 100,
@@ -135,6 +135,26 @@ function resolvedInputs(): RegimeInputs {
 }
 
 describe("source-aware regime dashboard", () => {
+  it("separates monitoring availability from the six-factor U.S. core model", () => {
+    const markup = renderToStaticMarkup(<RegimeDashboard payload={payload()} />);
+
+    expect(markup).toContain("Monitoring indicators 9/10 available");
+    expect(markup).toContain("Core factors 0/6 classifiable");
+    expect(markup).toContain("Core data coverage");
+    expect(markup).toContain("Inflation");
+    expect(markup).toContain("Growth");
+    expect(markup).toContain("Labor");
+    expect(markup).toContain("Policy / Rates");
+    expect(markup).toContain("Credit Conditions");
+    expect(markup).toContain("System Liquidity Proxy");
+    expect(markup).toContain("Supplementary Monitoring — Not classifier inputs");
+    expect(markup).toContain("U.S. data do not represent the world.");
+    expect(markup).toContain("Core Model Data Quality");
+    expect(markup).toContain("Bitcoin Blockspace Activity");
+    expect(markup).toContain("Legacy Liquidity Monitor");
+    expect(markup).not.toContain("Crypto demand");
+  });
+
   it("renders withheld regimes, unavailable and excluded observations, proxy notes, and the disclaimer", () => {
     const data = payload();
     const markup = renderToStaticMarkup(<RegimeDashboard payload={data} />);

@@ -77,6 +77,18 @@ describe("public-data score engine", () => {
     });
   });
 
+  it("uses monitor labels that describe blockspace activity and distinguish legacy liquidity", () => {
+    const scores = calculateScores(observations());
+    const blockspace = scoreFor(scores, "cryptoDemand");
+    const liquidity = scoreFor(scores, "liquidity");
+
+    expect(blockspace.label).toBe("Bitcoin Blockspace Activity");
+    expect(blockspace.summary).toContain("blockspace");
+    expect(blockspace.summary).not.toContain("aggregate crypto demand");
+    expect(liquidity.label).toBe("Legacy Liquidity Monitor");
+    expect(liquidity.summary).toContain("System Liquidity Proxy");
+  });
+
   it("renormalizes the available weights instead of treating missing oil as zero", () => {
     const input = observations({ cpi: 3.25, coreCpi: 3 }, ["oil"]);
     const inflation = scoreFor(calculateScores(input), "inflationPressure");

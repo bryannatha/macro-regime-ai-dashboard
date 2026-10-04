@@ -3,6 +3,7 @@ import type {
   MetricObservation,
   ObservationKey,
   ObservationMap,
+  ScoreLabel,
   ScoreKey,
   ScoreOrientation,
 } from "@/lib/types";
@@ -16,7 +17,7 @@ type ScoringComponent = {
 };
 
 type ScoringDefinition = {
-  label: string;
+  label: ScoreLabel;
   orientation: ScoreOrientation;
   description: string;
   components: ScoringComponent[];
@@ -45,18 +46,18 @@ export const SCORING_MODEL = {
     ],
   },
   liquidity: {
-    label: "Liquidity",
+    label: "Legacy Liquidity Monitor",
     orientation: "support",
-    description: "Higher readings indicate a softer broad dollar and lower long-term real yields.",
+    description: "Legacy public-indicator monitor; separate from the System Liquidity Proxy used by the core model.",
     components: [
       { input: "broadDollarIndex", weight: 0.5, low: 110, high: 130, direction: "lower" },
       { input: "tenYearRealYield", weight: 0.5, low: 0.5, high: 2.5, direction: "lower" },
     ],
   },
   cryptoDemand: {
-    label: "Crypto demand",
+    label: "Bitcoin Blockspace Activity",
     orientation: "demand",
-    description: "On-chain blockspace demand proxy; it is not BTC price, buying pressure, or investor flows.",
+    description: "Bitcoin on-chain blockspace usage proxy; it is not BTC price, buying pressure, or investor flows.",
     components: [
       { input: "mempoolVsize", weight: 0.5, low: 0, high: 5_000_000, direction: "higher" },
       { input: "mempoolMedianFeeRate", weight: 0.5, low: 0, high: 50, direction: "higher" },
@@ -103,7 +104,7 @@ function readingFor(orientation: ScoreOrientation, score: number | null): string
     return score >= 65 ? "Strong" : score >= 40 ? "Constructive" : "Soft";
   }
 
-  return score >= 65 ? "High demand" : score >= 40 ? "Building" : "Muted";
+  return score >= 65 ? "Elevated activity" : score >= 40 ? "Building" : "Quiet";
 }
 
 export function calculateScores(observations: ObservationMap): CategoryScore[] {

@@ -89,11 +89,18 @@ export type ScoreKey =
   | "cryptoDemand"
   | "indonesiaRisk";
 
+export type ScoreLabel =
+  | "Inflation pressure"
+  | "Growth stress"
+  | "Legacy Liquidity Monitor"
+  | "Bitcoin Blockspace Activity"
+  | "Indonesia risk";
+
 export type ScoreOrientation = "risk" | "support" | "demand";
 
 export interface CategoryScore {
   key: ScoreKey;
-  label: string;
+  label: ScoreLabel;
   score: number | null;
   coverage: number;
   coveragePercent: number;

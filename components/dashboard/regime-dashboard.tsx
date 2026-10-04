@@ -218,12 +218,21 @@ function sourceCount(payload: DashboardPayload): { available: number; total: num
   };
 }
 
+function coreFactorCount(payload: DashboardPayload): { classifiable: number; total: number } {
+  const factors = Object.values(payload.regime.factorReadiness);
+  return {
+    classifiable: factors.filter((factor) => factor.classifiable).length,
+    total: factors.length,
+  };
+}
+
 export function RegimeDashboard({ payload }: RegimeDashboardProps) {
   const [view, setView] = useState<DashboardView>("overview");
   const [report, setReport] = useState<AIReport | null>(null);
   const [reportError, setReportError] = useState<string | null>(null);
   const [loadingReport, setLoadingReport] = useState(true);
   const counts = sourceCount(payload);
+  const coreFactors = coreFactorCount(payload);
 
   const requestReport = useCallback(async () => {
     setLoadingReport(true);
@@ -249,7 +258,7 @@ export function RegimeDashboard({ payload }: RegimeDashboardProps) {
       ? "Data & sources"
       : "Methodology";
   const subtitle = view === "overview"
-    ? "A concise, public-data read across inflation, growth, liquidity, crypto blockspace, and Indonesia FX."
+    ? "A concise, public-data read across inflation, growth, liquidity, Bitcoin blockspace activity, and Indonesia FX."
     : view === "sources"
       ? "Every value carries a source, observation date, retrieval time, cadence, and availability state."
       : "Transparent, provisional rules; missing inputs are never scored as zero.";
@@ -270,9 +279,14 @@ export function RegimeDashboard({ payload }: RegimeDashboardProps) {
               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Data checked</div>
               <div className="tabular mt-0.5 text-xs font-medium text-slate-700">{formatDate(payload.generatedAt, true)} WIB</div>
             </div>
-            <Badge variant={counts.available > 0 ? "positive" : "caution"} className="whitespace-nowrap">
-              {counts.available}/{counts.total} feeds available
-            </Badge>
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <Badge aria-label={`${counts.available} of ${counts.total} monitoring indicators available`} variant={counts.available > 0 ? "positive" : "caution"} className="whitespace-nowrap">
+                Monitoring indicators {counts.available}/{counts.total} available
+              </Badge>
+              <Badge aria-label={`${coreFactors.classifiable} of ${coreFactors.total} core factors classifiable`} variant={coreFactors.classifiable > 0 ? "positive" : "caution"} className="whitespace-nowrap">
+                Core factors {coreFactors.classifiable}/{coreFactors.total} classifiable
+              </Badge>
+            </div>
             <Button aria-label="Refresh dashboard data" onClick={() => window.location.reload()} size="sm" variant="outline">
               <RefreshCw className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Refresh</span>
@@ -349,8 +363,14 @@ function OverviewView({
   return (
     <>
       <RegimeSummary payload={payload} />
-      <section aria-label="Macro scores" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-        {payload.scores.map((score) => <ScoreCard key={score.key} score={score} />)}
+      <section aria-labelledby="supplementary-monitoring-title" className="space-y-3">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-800" id="supplementary-monitoring-title">Supplementary Monitoring — Not classifier inputs</h3>
+          <p className="mt-1 text-[11px] text-slate-500">These indicators provide adjacent market context; they do not determine the U.S. macro regime.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          {payload.scores.map((score) => <ScoreCard key={score.key} score={score} />)}
+        </div>
       </section>
       <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <ObservationCharts observations={payload.observations} />
@@ -395,7 +415,7 @@ function RegimeSummary({ payload }: { payload: DashboardPayload }) {
           </div>
           <div className={cn("grid min-w-[220px] grid-cols-2 gap-2 rounded-md border p-3", resolved ? "border-white/10 bg-white/[0.04]" : "border-amber-200 bg-white/70")}>
             <div>
-              <div className={cn("text-[9px] font-medium uppercase tracking-[0.12em]", resolved ? "text-slate-400" : "text-amber-800")}>Data Quality</div>
+              <div className={cn("text-[9px] font-medium uppercase tracking-[0.12em]", resolved ? "text-slate-400" : "text-amber-800")}>Core Model Data Quality</div>
               <div className="tabular mt-1 font-mono text-2xl font-semibold">{assessment.dataQuality ?? "N/A"}<span className="text-xs text-slate-400"> / 100</span></div>
             </div>
             <div>
@@ -419,7 +439,7 @@ function RegimeSummary({ payload }: { payload: DashboardPayload }) {
             <CardTitle className="text-sm">Core data coverage</CardTitle>
             <Badge variant="outline" className="text-[10px]">60% + 2 families</Badge>
           </div>
-          <CardDescription>Core-factor readiness is separate from the five dashboard monitoring indicators.</CardDescription>
+          <CardDescription>U.S. data do not represent the world. Only the six U.S. core factors classify the regime; Indonesia FX, Energy, and Crypto remain separate overlays.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           {regimeFactorOrder.map((key) => {
@@ -552,7 +572,7 @@ function ReportCard({
               <h3 className="mt-2 text-sm font-semibold text-slate-800">{report.title}</h3>
               <p className="mt-1.5 text-xs leading-5 text-slate-600">{report.executiveSummary}</p>
               <p className="mt-3 text-[10px] text-slate-400">
-                Latest input date: {formatDate(report.dataAsOf)} · {assessmentStatusLabels[report.assessmentStatus]} · Data Quality {report.dataQuality ?? "N/A"}/100 · Regime Clarity {report.regimeClarity ?? "N/A"}/100
+                Latest input date: {formatDate(report.dataAsOf)} · {assessmentStatusLabels[report.assessmentStatus]} · Core Model Data Quality {report.dataQuality ?? "N/A"}/100 · Regime Clarity {report.regimeClarity ?? "N/A"}/100
               </p>
             </div>
             <div className="grid content-start gap-4 sm:grid-cols-2">
@@ -726,7 +746,7 @@ function MethodView({ payload }: { payload: DashboardPayload }) {
       </Card>
       <Card className="border-slate-200 shadow-none">
         <CardHeader>
-          <CardTitle className="text-sm">Monitoring indicator construction</CardTitle>
+          <CardTitle className="text-sm">Supplementary Monitoring — Not classifier inputs</CardTitle>
           <CardDescription>These five public-feed cards are separate monitoring signals. Their scores are not mapped into or substituted for the six-factor regime classifier.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 xl:grid-cols-2">
@@ -770,7 +790,7 @@ function MethodView({ payload }: { payload: DashboardPayload }) {
       </Card>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="border-slate-200 shadow-none">
-          <CardHeader><CardTitle className="text-sm">Core factor readiness</CardTitle><CardDescription>Every factor requires at least 60% coverage and two eligible source families; anchors also need required native comparisons.</CardDescription></CardHeader>
+          <CardHeader><CardTitle className="text-sm">U.S. core factor readiness</CardTitle><CardDescription>Every factor requires at least 60% coverage and two eligible source families; anchors also need required native comparisons.</CardDescription></CardHeader>
           <CardContent className="grid gap-2 sm:grid-cols-2">
             {regimeFactorOrder.map((key) => {
               const factor = payload.regime.factorReadiness[key];
@@ -784,9 +804,9 @@ function MethodView({ payload }: { payload: DashboardPayload }) {
           </CardContent>
         </Card>
         <Card className="border-slate-200 shadow-none">
-          <CardHeader><CardTitle className="text-sm">Data Quality &amp; Regime Clarity</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-sm">Core Model Data Quality &amp; Regime Clarity</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-xs leading-5 text-slate-600">
-            <p><strong className="text-slate-800">Data Quality</strong> summarizes source eligibility, freshness, history, release quality, and fetch health using a fixed denominator. Missing source weight is not removed.</p>
+            <p><strong className="text-slate-800">Core Model Data Quality</strong> summarizes source eligibility, freshness, history, release quality, and fetch health using a fixed denominator. Missing source weight is not removed.</p>
             <p><strong className="text-slate-800">Regime Clarity</strong> combines rule support, threshold sensitivity, and residual core tensions. Defining evidence is not penalized twice; sensitivity caps apply to every regime label.</p>
             <p>Neither is a probability, forecast, or investment signal. Unresolved missing evidence is provisional or insufficient, not Mixed.</p>
           </CardContent>
