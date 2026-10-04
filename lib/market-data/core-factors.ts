@@ -405,6 +405,7 @@ export function toRegimeFactorInputs(factors: CoreFactorsResult["factors"]): Rec
   bounds: ScoreBounds;
   coverage: number;
   eligibleFamilies: number;
+  configuredFamilies: number;
   historyYears: number | null;
   releaseQuality: number | null;
 }> {
@@ -412,12 +413,14 @@ export function toRegimeFactorInputs(factors: CoreFactorsResult["factors"]): Rec
     bounds: value.bounds,
     coverage: value.coverage,
     eligibleFamilies: value.eligibleFamilies,
+    configuredFamilies: value.configuredFamilies,
     historyYears: value.historyYears,
     releaseQuality: value.releaseQuality,
   }])) as Record<RegimeFactorKey, {
     bounds: ScoreBounds;
     coverage: number;
     eligibleFamilies: number;
+    configuredFamilies: number;
     historyYears: number | null;
     releaseQuality: number | null;
   }>;

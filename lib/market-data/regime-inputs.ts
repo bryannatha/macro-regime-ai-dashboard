@@ -1,8 +1,6 @@
-import type { RegimeFactorInput, RegimeFactorKey, RegimeInputs } from "@/lib/types";
+import { TREASURY_POLICY_BLOCKER, type RegimeFactorInput, type RegimeFactorKey, type RegimeInputs } from "@/lib/types";
 import type { CoreFactorsResult } from "./types";
-import { toQualitySlots, toRegimeFactorInputs } from "./core-factors";
-
-export const TREASURY_POLICY_BLOCKER = "POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED";
+import { buildCoreFactors, toQualitySlots, toRegimeFactorInputs } from "./core-factors";
 
 const factorKeys: RegimeFactorKey[] = [
   "inflation",
@@ -13,11 +11,16 @@ const factorKeys: RegimeFactorKey[] = [
   "liquidityProxy",
 ];
 
-function unavailableFactor(): RegimeFactorInput {
+const configuredFactors = toRegimeFactorInputs(
+  buildCoreFactors([], "1970-01-01T00:00:00.000Z").factors,
+);
+
+function unavailableFactor(configuredFamilies: number): RegimeFactorInput {
   return {
     bounds: null,
     coverage: 0,
     eligibleFamilies: 0,
+    configuredFamilies,
     historyYears: null,
     releaseQuality: null,
   };
@@ -25,7 +28,10 @@ function unavailableFactor(): RegimeFactorInput {
 
 export function createUnconfiguredRegimeInputs(sourceBlockers: string[] = []): RegimeInputs {
   return {
-    factors: Object.fromEntries(factorKeys.map((key) => [key, unavailableFactor()])) as RegimeInputs["factors"],
+    factors: Object.fromEntries(factorKeys.map((key) => [
+      key,
+      unavailableFactor(configuredFactors[key].configuredFamilies),
+    ])) as RegimeInputs["factors"],
     native: {
       deltaPi: null,
       realPolicyRate: null,

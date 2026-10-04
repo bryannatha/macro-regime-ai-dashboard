@@ -1,4 +1,5 @@
 import type {
+  CoreReadinessStatus,
   QualitySlotInput,
   RegimeFactorKey,
   RegimeNativeInputs,
@@ -8,7 +9,7 @@ import type {
   SourceState,
 } from "@/lib/types";
 
-export type { SourceRegistryEntry, SourceState } from "@/lib/types";
+export type { CoreReadinessStatus, SourceRegistryEntry, SourceState } from "@/lib/types";
 
 export interface AdapterOptions {
   fetchImpl?: typeof fetch;
@@ -79,8 +80,6 @@ export interface CoreTransformResult {
   releaseQuality: number | null;
   reason: string | null;
 }
-
-export type CoreReadinessStatus = "READY" | "ADEQUATE" | "LIMITED" | "WITHHELD";
 
 export interface CoreSlotQuality {
   eligible: boolean;

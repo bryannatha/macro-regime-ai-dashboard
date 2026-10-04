@@ -4,6 +4,7 @@ import type {
   ObservationKey,
   ObservationMap,
 } from "@/lib/types";
+import { TREASURY_POLICY_BLOCKER } from "@/lib/types";
 import { getResearchImplications } from "@/lib/playbook";
 import { evaluateRegime } from "@/lib/regime";
 import { calculateScores } from "@/lib/scoring";
@@ -17,7 +18,7 @@ import { fetchFedBroadDollar } from "./providers/fed";
 import { fetchFrankfurterUsdIdr } from "./providers/frankfurter";
 import { fetchMempoolDemand } from "./providers/mempool";
 import { fetchTreasuryYields } from "./providers/treasury";
-import { createUnconfiguredRegimeInputs, TREASURY_POLICY_BLOCKER } from "./regime-inputs";
+import { createUnconfiguredRegimeInputs } from "./regime-inputs";
 
 export interface DashboardOptions extends AdapterOptions {
   eiaApiKey?: string;

@@ -12,8 +12,9 @@ import type {
 } from "@/lib/types";
 import { evaluateRegime } from "@/lib/regime";
 import { createUnconfiguredRegimeInputs } from "@/lib/market-data/regime-inputs";
+import { getSourceRegistry } from "@/lib/market-data/source-registry";
 import { getResearchImplications } from "@/lib/playbook";
-import { observationFreshness, ObservationTable, RegimeDashboard } from "./regime-dashboard";
+import { CoreFactorReadiness, CoreSourceRegistry, observationFreshness, ObservationTable, RegimeDashboard } from "./regime-dashboard";
 
 const keys: ObservationKey[] = [
   "cpi", "coreCpi", "oil", "broadDollarIndex", "twoYearYield", "tenYearRealYield",
@@ -143,6 +144,7 @@ describe("source-aware regime dashboard", () => {
     expect(markup).toContain("Core data coverage");
     expect(markup).toContain("Inflation");
     expect(markup).toContain("Growth");
+    expect(markup).toContain("0/5 families eligible");
     expect(markup).toContain("Labor");
     expect(markup).toContain("Policy / Rates");
     expect(markup).toContain("Credit Conditions");
@@ -216,5 +218,74 @@ describe("source-aware regime dashboard", () => {
     expect(markup).toContain("35% indicator coverage");
     expect(markup).toContain("N/A");
     expect(markup).not.toContain("0 / 100");
+  });
+
+  it("shows factor family coverage and readiness separately from monitoring availability", () => {
+    const data = payload();
+    const inputs = resolvedInputs();
+    inputs.factors.growth = {
+      ...inputs.factors.growth,
+      coverage: 0.875,
+      eligibleFamilies: 4,
+      configuredFamilies: 5,
+    };
+    data.sourceRegistry = getSourceRegistry();
+    data.regime = evaluateRegime(inputs);
+
+    const markup = renderToStaticMarkup(<RegimeDashboard payload={data} />);
+
+    expect(markup).toContain("87.5%");
+    expect(markup).toContain("4/5 families eligible");
+    expect(markup).toContain("ADEQUATE");
+    expect(markup).toContain("Registry health");
+    expect(markup).toContain("Core factors 6/6 classifiable");
+    expect(markup).toContain("Supplementary Monitoring — Not classifier inputs");
+  });
+
+  it("lists source identifiers, terms, attribution, distinct dates, and unavailable reasons", () => {
+    const source = getSourceRegistry()[0];
+    const sources = [
+      { ...source, sourceHealth: "AVAILABLE" as const, observedAt: "2026-10-01", releasedAt: "2026-10-02T13:30:00Z", retrievedAt: "2026-10-03T12:00:00Z" },
+      ...(["STALE", "MISSING", "FAILED", "REDISTRIBUTION_BLOCKED"] as const).map((sourceHealth) => ({
+        ...source,
+        id: `fixture-${sourceHealth.toLowerCase()}`,
+        sourceHealth,
+      })),
+      getSourceRegistry().find(({ id }) => id === "treasury-real-yield")!,
+    ];
+
+    const markup = renderToStaticMarkup(<CoreSourceRegistry sources={sources} />);
+
+    expect(markup).toContain("Source ID");
+    expect(markup).toContain("Endpoint");
+    expect(markup).toContain("Reuse evidence");
+    expect(markup).toContain("Attribution");
+    expect(markup).toContain("Observation date");
+    expect(markup).toContain("Release date");
+    expect(markup).toContain("Retrieval date");
+    expect(markup).toContain("Units");
+    expect(markup).toContain("Seasonal basis");
+    expect(markup).toContain("Parser");
+    expect(markup).toContain("History");
+    expect(markup).toContain("Verified");
+    expect(markup).toContain("Cadence");
+    expect(markup).toContain("2026");
+    expect(markup).toContain("Not available");
+    expect(markup).toContain("AVAILABLE");
+    expect(markup).toContain("STALE");
+    expect(markup).toContain("MISSING");
+    expect(markup).toContain("FAILED");
+    expect(markup).toContain("REDISTRIBUTION_BLOCKED");
+    expect(markup).toContain("POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED");
+  });
+
+  it("identifies configured factor families without an admitted source", () => {
+    const data = payload();
+    data.sourceRegistry = getSourceRegistry();
+
+    const markup = renderToStaticMarkup(<CoreFactorReadiness payload={data} />);
+
+    expect(markup).toContain("1 configured family has no admitted source");
+    expect(markup).toContain("Registry health");
   });
 });

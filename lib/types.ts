@@ -6,11 +6,14 @@ export const SOURCE_STATES = [
   "REDISTRIBUTION_BLOCKED",
 ] as const;
 
+export const TREASURY_POLICY_BLOCKER = "POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED";
+
 export type SourceState = (typeof SOURCE_STATES)[number];
 export type SourceReuseStatus = "CLEARED" | "CONDITIONAL" | "UNRESOLVED" | "BLOCKED";
 export type SourceParserStatus = "UNVERIFIED" | "PARTIAL" | "VERIFIED" | "FAILED";
 export type SourceHistoryStatus = "UNVERIFIED" | "PARTIAL" | "VERIFIED" | "FAILED";
 export type CoreSourceCadence = "daily" | "weekly" | "monthly" | "quarterly";
+export type CoreReadinessStatus = "READY" | "ADEQUATE" | "LIMITED" | "WITHHELD";
 
 export interface SourceFamilyAllocation {
   factor: RegimeFactorKey;
@@ -40,6 +43,10 @@ export interface SourceRegistryEntry {
   historyStatus: SourceHistoryStatus;
   verifiedAt: string | null;
   familyAllocations: SourceFamilyAllocation[];
+  observedAt?: string | null;
+  releasedAt?: string | null;
+  retrievedAt?: string | null;
+  healthReason?: string | null;
 }
 
 export type ObservationKey =
@@ -157,6 +164,7 @@ export interface RegimeFactorInput {
   bounds: ScoreBounds | null;
   coverage: number;
   eligibleFamilies: number;
+  configuredFamilies?: number;
   historyYears: number | null;
   releaseQuality: number | null;
 }
@@ -261,7 +269,9 @@ export interface RegimeSensitivity {
 export interface FactorReadiness {
   coverage: number;
   eligibleFamilies: number;
+  configuredFamilies: number;
   classifiable: boolean;
+  status: CoreReadinessStatus;
 }
 
 export interface RegimeAssessment {

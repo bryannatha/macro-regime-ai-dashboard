@@ -31,9 +31,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { REGIME_LABELS } from "@/lib/regime";
 import { SCORING_MODEL } from "@/lib/scoring";
+import { SOURCE_STATES, TREASURY_POLICY_BLOCKER } from "@/lib/types";
 import type {
   AIReport,
   CategoryScore,
+  CoreReadinessStatus,
   DashboardPayload,
   MetricObservation,
   ObservationKey,
@@ -41,6 +43,7 @@ import type {
   RegimeFactorKey,
   ScoreKey,
   ScoreOrientation,
+  SourceRegistryEntry,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -226,6 +229,63 @@ function coreFactorCount(payload: DashboardPayload): { classifiable: number; tot
   };
 }
 
+function formatCoverage(coverage: number): string {
+  const percent = Math.round(coverage * 1000) / 10;
+  return `${Number.isInteger(percent) ? percent.toFixed(0) : percent.toFixed(1)}%`;
+}
+
+function sourcesForFactor(payload: DashboardPayload, factor: RegimeFactorKey): SourceRegistryEntry[] {
+  return payload.sourceRegistry.filter((source) =>
+    source.familyAllocations.some((allocation) => allocation.factor === factor));
+}
+
+function unregisteredFamilyCount(factor: RegimeFactorKey, configuredFamilies: number, sources: SourceRegistryEntry[]): number {
+  const registeredFamilies = new Set(sources.flatMap((source) => source.familyAllocations
+    .filter((allocation) => allocation.factor === factor)
+    .map(({ family }) => family)));
+  return Math.max(0, configuredFamilies - registeredFamilies.size);
+}
+
+function sourceHealthSummary(sources: SourceRegistryEntry[]): string {
+  if (!sources.length) return "No core source metadata available";
+  const counts = SOURCE_STATES.map((state) => ({
+    state,
+    count: sources.filter((source) => source.sourceHealth === state).length,
+  })).filter(({ count }) => count > 0);
+  return counts.map(({ state, count }) => `${count} ${state.toLowerCase()}`).join(" · ");
+}
+
+function sourceReasons(source: SourceRegistryEntry): string[] {
+  const reasons = source.healthReason ? [source.healthReason] : [];
+  if (source.sourceHealth === "REDISTRIBUTION_BLOCKED") {
+    reasons.push(source.id === "treasury-real-yield" ? TREASURY_POLICY_BLOCKER : "Source reuse/display is blocked.");
+  } else if (source.sourceHealth === "FAILED") {
+    reasons.push("The latest source fetch or parser validation failed; no value is eligible.");
+  } else if (source.sourceHealth === "STALE") {
+    reasons.push("The latest source observation is outside its approved freshness window.");
+  } else if (source.sourceHealth === "MISSING") {
+    reasons.push("No current core observation is attached to the dashboard payload.");
+  }
+  if (source.reuseStatus === "UNRESOLVED" && source.sourceHealth !== "REDISTRIBUTION_BLOCKED") {
+    reasons.push("Source-specific reuse/display clearance is unresolved.");
+  }
+  if (source.parserStatus === "FAILED") reasons.push("Parser validation failed.");
+  else if (source.parserStatus !== "VERIFIED") reasons.push(`Parser state is ${source.parserStatus.toLowerCase()}.`);
+  if (source.historyStatus === "FAILED") reasons.push("Historical-series validation failed.");
+  else if (source.historyStatus !== "VERIFIED") reasons.push(`History state is ${source.historyStatus.toLowerCase()}.`);
+  return Array.from(new Set(reasons));
+}
+
+function readinessVariant(status: CoreReadinessStatus): "positive" | "caution" | "outline" {
+  return status === "READY" || status === "ADEQUATE" ? "positive"
+    : status === "LIMITED" ? "caution" : "outline";
+}
+
+function sourceStateVariant(state: SourceRegistryEntry["sourceHealth"]): "positive" | "caution" | "outline" {
+  return state === "AVAILABLE" ? "positive"
+    : state === "MISSING" ? "outline" : "caution";
+}
+
 export function RegimeDashboard({ payload }: RegimeDashboardProps) {
   const [view, setView] = useState<DashboardView>("overview");
   const [report, setReport] = useState<AIReport | null>(null);
@@ -260,7 +320,7 @@ export function RegimeDashboard({ payload }: RegimeDashboardProps) {
   const subtitle = view === "overview"
     ? "A concise, public-data read across inflation, growth, liquidity, Bitcoin blockspace activity, and Indonesia FX."
     : view === "sources"
-      ? "Every value carries a source, observation date, retrieval time, cadence, and availability state."
+      ? "Monitoring timestamps and core-source admission, health, and release state are shown separately."
       : "Transparent, provisional rules; missing inputs are never scored as zero.";
 
   return (
@@ -444,12 +504,17 @@ function RegimeSummary({ payload }: { payload: DashboardPayload }) {
         <CardContent className="space-y-3">
           {regimeFactorOrder.map((key) => {
             const factor = assessment.factorReadiness[key];
+            const sources = sourcesForFactor(payload, key);
             return (
-              <div className="flex items-center gap-3" key={key}>
-                <span className={cn("h-2 w-2 rounded-full", factor.classifiable ? "bg-teal-500" : "bg-amber-500")} />
-                <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-700">{regimeFactorLabels[key]}</span>
-                <span className="tabular font-mono text-[10px] text-slate-500">{Math.round(factor.coverage * 100)}% · {factor.eligibleFamilies}/2</span>
-                <span className="min-w-[54px] text-right text-[10px] text-slate-500">{factor.classifiable ? "Ready" : "Withheld"}</span>
+              <div className="rounded border border-slate-100 bg-slate-50/60 px-3 py-2" key={key}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate text-xs font-medium text-slate-700">{regimeFactorLabels[key]}</span>
+                  <Badge variant={readinessVariant(factor.status)} className="text-[9px]">{factor.status}</Badge>
+                </div>
+                <div className="mt-1 text-[10px] text-slate-500">
+                  {formatCoverage(factor.coverage)} coverage · {factor.eligibleFamilies}/{factor.configuredFamilies} families eligible
+                </div>
+                <div className="mt-0.5 text-[9px] text-slate-400">Registry health: {sourceHealthSummary(sources)}</div>
               </div>
             );
           })}
@@ -603,9 +668,146 @@ function ReportList({ items, label }: { items: string[]; label: string }) {
 function SourcesView({ payload }: { payload: DashboardPayload }) {
   return (
     <>
+      <CoreFactorReadiness payload={payload} />
+      <CoreSourceRegistry sources={payload.sourceRegistry} />
       <ObservationTable payload={payload} />
       <ObservationCharts observations={payload.observations} />
     </>
+  );
+}
+
+export function CoreFactorReadiness({ payload }: { payload: DashboardPayload }) {
+  return (
+    <Card className="border-slate-200 shadow-none">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-sm">U.S. core factor readiness</CardTitle>
+        <CardDescription>Coverage and eligible families are independent of supplementary monitoring-feed availability.</CardDescription>
+      </CardHeader>
+      <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {regimeFactorOrder.map((key) => {
+          const factor = payload.regime.factorReadiness[key];
+          const sources = sourcesForFactor(payload, key);
+          const reasons = sources.flatMap((source) => sourceReasons(source).map((reason) => `${source.id}: ${reason}`));
+          const unregisteredFamilies = unregisteredFamilyCount(key, factor.configuredFamilies, sources);
+          if (unregisteredFamilies > 0) {
+            reasons.push(`${unregisteredFamilies} configured ${unregisteredFamilies === 1 ? "family has" : "families have"} no admitted source.`);
+          }
+          return (
+            <div className="rounded-md border border-slate-200 bg-white p-3" key={key}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-xs font-semibold text-slate-800">{regimeFactorLabels[key]}</div>
+                <Badge variant={readinessVariant(factor.status)} className="text-[9px]">{factor.status}</Badge>
+              </div>
+              <div className="mt-2 tabular text-[11px] font-medium text-slate-700">
+                {formatCoverage(factor.coverage)} coverage · {factor.eligibleFamilies}/{factor.configuredFamilies} families eligible
+              </div>
+              <div className="mt-1 text-[10px] text-slate-500">Registry health: {sourceHealthSummary(sources)}</div>
+              {reasons.length ? (
+                <details className="mt-2 border-t border-slate-100 pt-2">
+                  <summary className="cursor-pointer text-[10px] font-medium text-amber-800">Unavailable / blocked reasons ({reasons.length})</summary>
+                  <ul className="mt-2 space-y-1.5">
+                    {reasons.map((reason) => <li className="break-words text-[9px] leading-4 text-slate-500" key={reason}>{reason}</li>)}
+                  </ul>
+                </details>
+              ) : <p className="mt-2 text-[9px] text-teal-700">No registry blockers reported.</p>}
+            </div>
+          );
+        })}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function CoreSourceRegistry({ sources }: { sources: SourceRegistryEntry[] }) {
+  return (
+    <section aria-labelledby="core-source-registry-title" className="space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold text-slate-800" id="core-source-registry-title">Core source registry</h3>
+        <p className="mt-1 text-[11px] text-slate-500">Registry health is admission metadata, not proof of a current observation. Observation, release, and retrieval dates remain separate from supplementary monitoring feeds.</p>
+      </div>
+      {sources.length ? (
+        <div className="grid gap-3 xl:grid-cols-2">
+          {sources.map((source) => {
+            const reasons = sourceReasons(source);
+            return (
+              <Card className="border-slate-200 shadow-none" key={source.id}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <CardTitle className="text-xs leading-5">{source.name}</CardTitle>
+                      <div className="mt-1 flex flex-wrap items-baseline gap-x-1.5 text-[9px] text-slate-400">
+                        <span className="font-medium">Source ID</span>
+                        <span className="break-all font-mono">{source.id}</span>
+                      </div>
+                    </div>
+                    <Badge aria-label={`Registry source health: ${source.sourceHealth}`} variant={sourceStateVariant(source.sourceHealth)} className="shrink-0 text-[9px]">{source.sourceHealth}</Badge>
+                  </div>
+                  <CardDescription>{source.owner} · {source.accessMethod}</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 text-[10px]">
+                  <div>
+                    <div className="font-semibold text-slate-500">Endpoint</div>
+                    <a className="mt-0.5 block break-all text-teal-800 underline decoration-teal-200 underline-offset-2" href={source.endpoint} rel="noreferrer" target="_blank">{source.endpoint}</a>
+                  </div>
+                  <div>
+                    <div className="font-semibold text-slate-500">Reuse evidence</div>
+                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-slate-600">
+                      <span>{source.reuseStatus}</span>
+                      <a className="text-teal-800 underline decoration-teal-200 underline-offset-2" href={source.reuseEvidenceUrl ?? source.reuseReviewUrl} rel="noreferrer" target="_blank">Terms / review</a>
+                    </div>
+                  </div>
+                  <div className="grid gap-x-4 gap-y-2 sm:grid-cols-2">
+                    <RegistryField label="Cadence" value={source.cadence} />
+                    <RegistryField label="Seasonal basis" value={source.seasonalBases.join(", ")} />
+                    <RegistryField label="Units" value={source.units.join(", ")} />
+                    <RegistryField label="Identifiers" value={source.identifiers.join(", ")} />
+                    <RegistryField label="Parser" value={source.parserStatus} />
+                    <RegistryField label="History" value={source.historyStatus} />
+                    <RegistryField label="Release date quality" value={source.releaseDateQuality === null ? "Not available" : formatCoverage(source.releaseDateQuality)} />
+                    <RegistryField label="First usable period" value={source.firstUsablePeriod ?? "Not available"} />
+                    <RegistryField label="Verified" value={formatDate(source.verifiedAt)} />
+                  </div>
+                  <div className="grid gap-2 border-y border-slate-100 py-2 sm:grid-cols-3">
+                    <RegistryField label="Observation date" value={formatDate(source.observedAt ?? null)} />
+                    <RegistryField label="Release date" value={formatDate(source.releasedAt ?? null, true)} />
+                    <RegistryField label="Retrieval date" value={formatDate(source.retrievedAt ?? null, true)} />
+                  </div>
+                  <RegistryField label="Attribution" value={source.attribution} />
+                  <RegistryField label="Expected release schedule" value={source.expectedReleaseSchedule} />
+                  {source.familyAllocations.length > 0 && (
+                    <RegistryField
+                      label="Configured family allocations"
+                      value={source.familyAllocations.map(({ factor, family, weight }) => `${regimeFactorLabels[factor]} / ${family} (${formatCoverage(weight)})`).join("; ")}
+                    />
+                  )}
+                  {reasons.length > 0 && (
+                    <div className="rounded border border-amber-100 bg-amber-50/70 p-2">
+                      <div className="font-semibold text-amber-900">Unavailable / blocked reason</div>
+                      <ul className="mt-1 space-y-1 text-slate-600">
+                        {reasons.map((reason) => <li className="break-words" key={reason}>{reason}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      ) : (
+        <Card className="border-dashed border-slate-300 bg-white/70 shadow-none">
+          <CardContent className="p-5 text-center text-xs text-slate-500">No core source registry entries are available.</CardContent>
+        </Card>
+      )}
+    </section>
+  );
+}
+
+function RegistryField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="font-semibold text-slate-500">{label}</div>
+      <div className="mt-0.5 break-words leading-4 text-slate-700">{value || "Not available"}</div>
+    </div>
   );
 }
 

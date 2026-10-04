@@ -456,11 +456,20 @@ function unknownDiagnostics(): Record<Regime, RuleDiagnostic> {
 }
 
 function factorReadiness(inputs: RegimeInputs): Record<RegimeInputs["factors"] extends Record<infer K, RegimeFactorInput> ? K : never, FactorReadiness> {
-  return Object.fromEntries(FACTOR_KEYS.map((key) => [key, {
-    coverage: inputs.factors[key].coverage,
-    eligibleFamilies: inputs.factors[key].eligibleFamilies,
-    classifiable: isClassifiable(inputs.factors[key]),
-  }])) as Record<RegimeInputs["factors"] extends Record<infer K, RegimeFactorInput> ? K : never, FactorReadiness>;
+  return Object.fromEntries(FACTOR_KEYS.map((key) => {
+    const factor = inputs.factors[key];
+    const classifiable = isClassifiable(factor);
+    const status = !classifiable ? "WITHHELD"
+      : factor.coverage >= 1 - 1e-10 ? "READY"
+        : factor.coverage >= 0.8 ? "ADEQUATE" : "LIMITED";
+    return [key, {
+      coverage: factor.coverage,
+      eligibleFamilies: factor.eligibleFamilies,
+      configuredFamilies: Math.max(factor.configuredFamilies ?? factor.eligibleFamilies, factor.eligibleFamilies),
+      classifiable,
+      status,
+    }];
+  })) as Record<RegimeInputs["factors"] extends Record<infer K, RegimeFactorInput> ? K : never, FactorReadiness>;
 }
 
 const DIRECTION_VALUE: Record<Exclude<MacroDirection, "UNKNOWN">, number> = {
