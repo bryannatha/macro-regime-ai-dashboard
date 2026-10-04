@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { MetricObservation, ObservationKey, ObservationMap, Regime } from "@/lib/types";
-import { calculateScores, classifyRegime } from "@/lib/scoring";
+import type { MetricObservation, ObservationKey, ObservationMap } from "@/lib/types";
+import { calculateScores } from "@/lib/scoring";
 
 const observationKeys: ObservationKey[] = [
   "cpi", "coreCpi", "oil", "broadDollarIndex", "twoYearYield", "tenYearRealYield",
@@ -103,59 +103,4 @@ describe("public-data score engine", () => {
     expect(inflation.score).toBe(50);
   });
 
-  it("withholds the regime when any required core category lacks coverage", () => {
-    const cases: ObservationKey[][] = [
-      ["cpi", "coreCpi", "oil"],
-      ["joblessClaims", "twoYearYield"],
-      ["broadDollarIndex", "tenYearRealYield"],
-      ["mempoolVsize", "mempoolMedianFeeRate"],
-    ];
-
-    for (const missing of cases) {
-      const input = observations({}, missing);
-      expect(classifyRegime(input, calculateScores(input))).toBeNull();
-    }
-  });
-
-  it("cannot classify Commodity Inflation without an observed oil price", () => {
-    const input = observations({ cpi: 4.8, coreCpi: 4.3 }, ["oil"]);
-    const regime = classifyRegime(input, calculateScores(input));
-
-    expect(regime?.regime).not.toBe("Commodity Inflation");
-  });
-
-  it("cannot classify Fiat Debasement while gold is excluded", () => {
-    const input = observations({
-      broadDollarIndex: 110,
-      tenYearRealYield: 0.5,
-      mempoolVsize: 4_000_000,
-      mempoolMedianFeeRate: 40,
-    });
-
-    expect(classifyRegime(input, calculateScores(input))?.regime).not.toBe("Fiat Debasement");
-  });
-
-  it.each([
-    ["Hard Landing", { cpi: 2.5, coreCpi: 2.6, oil: 78, joblessClaims: 350, twoYearYield: 5.2, broadDollarIndex: 130, tenYearRealYield: 2.5, mempoolVsize: 1_000_000, mempoolMedianFeeRate: 5 }],
-    ["Stagflation", { cpi: 4.8, coreCpi: 4.3, oil: 108, joblessClaims: 350, twoYearYield: 5.2 }],
-    ["Commodity Inflation", { cpi: 4.5, coreCpi: 4, oil: 100 }],
-    ["Liquidity Reflation", { broadDollarIndex: 115, tenYearRealYield: 1.4, mempoolVsize: 4_000_000, mempoolMedianFeeRate: 40 }],
-    ["Goldilocks", { cpi: 2, coreCpi: 2, oil: 60, joblessClaims: 200, twoYearYield: 3, broadDollarIndex: 125, tenYearRealYield: 2, mempoolVsize: 1_000_000, mempoolMedianFeeRate: 5 }],
-  ] as Array<[Regime, Partial<Record<ObservationKey, number>>]>)
-  ("classifies adequate observations as %s", (expected, values) => {
-    const input = observations(values);
-    expect(classifyRegime(input, calculateScores(input))?.regime).toBe(expected);
-  });
-
-  it("classifies Fiat Debasement only when an actual gold observation is available", () => {
-    const input = observations({
-      broadDollarIndex: 110,
-      tenYearRealYield: 0.5,
-      mempoolVsize: 4_000_000,
-      mempoolMedianFeeRate: 40,
-      goldPrice: 3_000,
-    });
-
-    expect(classifyRegime(input, calculateScores(input))?.regime).toBe("Fiat Debasement");
-  });
 });

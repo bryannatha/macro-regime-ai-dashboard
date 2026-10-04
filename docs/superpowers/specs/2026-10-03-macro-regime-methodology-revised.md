@@ -6,6 +6,8 @@
 
 **Scope:** methodology specification and analytical review. No application implementation is authorized by this document alone.
 
+**Current authority:** the three affected methodology choices are superseded by [Revised v0.3](2026-10-04-macro-regime-methodology-v0.3.md). Unchanged sections below remain its approved baseline. This v0.2 text and evidence are retained as dated review records; use v0.3 for MIXED clarity/support, sensitivity caps, the inflationary-expansion label, Stagflationary gates and affected diagnostics.
+
 ## 1. Executive Verdict
 
 **APPROVE WITH MINOR CONDITIONS for staged implementation.** The revised definitions survive the bounded logical and synthetic review below. They are sufficiently concrete to implement and test. Production activation is conditional on source contracts and a complete revised-history diagnostic; neither has been presumed successful.

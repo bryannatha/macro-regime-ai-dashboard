@@ -1,8 +1,9 @@
 # Macro Regime AI Dashboard
 
 A read-only Next.js 15 dashboard for daily public macro observations across inflation, growth
-stress, liquidity, Bitcoin blockspace demand, and Indonesia FX risk. The app uses deterministic
-rules; the report endpoint is not connected to an AI model. There is no trading or brokerage
+stress, liquidity, Bitcoin blockspace demand, and Indonesia FX risk. The five dashboard scores
+are monitoring indicators; they do not feed the separate U.S. macro regime classifier. The report
+endpoint is deterministic and is not connected to an AI model. There is no trading or brokerage
 integration.
 
 **Educational research tool, not financial advice.** Scores and regimes are provisional heuristics,
@@ -31,12 +32,13 @@ The UI marks observations stale after 3 days for daily feeds, 14 days for weekly
 Broad Dollar series, and 50 days for monthly CPI. Current mempool values use a 1-day freshness
 window.
 
-## Score Method
+## Monitoring Indicators
 
 Components are linearly normalized and clamped to 0–100. Higher scores mean more inflation or
 growth risk, more liquidity support, stronger blockspace activity, or more Indonesia external
-pressure, depending on the card. Available configured weights are renormalized only when coverage is
-at least 60%; below that threshold the score is withheld. Missing inputs are never treated as zero.
+pressure, depending on the card. Available configured weights are renormalized only when indicator
+coverage is at least 60%; below that threshold the score is withheld. Missing inputs are never
+treated as zero. These indicators do not substitute for classifier factors.
 
 | Category | Inputs, weights, normalization bounds |
 | --- | --- |
@@ -46,11 +48,28 @@ at least 60%; below that threshold the score is withheld. Missing inputs are nev
 | Crypto demand | Mempool virtual size 50% (0–5,000,000 vB higher), projected median fee 50% (0–50 sat/vB higher) |
 | Indonesia risk | USD/IDR 50% (14,500–17,500 higher), Broad Dollar 25% (110–130 higher), Brent 25% ($55–115 higher) |
 
-The regime classifier requires at least 60% coverage for inflation, growth, liquidity, and crypto
-blockspace scores. Commodity Inflation additionally requires observed Brent at or above $85. Fiat
-Debasement requires observed gold at or above $2,850; that series is excluded in this public-data
-tier, so the rule cannot currently trigger. Goldilocks is residual only after required coverage is
-adequate. All thresholds and the displayed confidence are heuristic.
+## U.S. Regime Framework
+
+The approved classifier has six distinct U.S. core factors: Inflation, Growth, Labor, Policy / Rates,
+Credit Conditions, and System Liquidity Proxy. Each requires registered source families, sufficient
+coverage, and supporting native comparisons. The five monitoring indicators above and the Indonesia,
+energy, and crypto context feeds are not automatically mapped into these factors.
+
+The current adapters do not yet implement the required six-factor source and history contracts. As a
+result, the live app currently reports `INSUFFICIENT_DATA`, a null regime and null Regime Clarity;
+Data Quality is 0 because none of the fixed core slots is eligible. The indicator dashboard remains
+usable, but the app does not infer a regime or Research Implications from those proxy scores.
+
+The six labels are Goldilocks, Inflationary Expansion / Reflation, Stagflationary, Contraction /
+Recessionary, Disinflationary Slowdown, and Mixed. Rules are evaluated as an unordered set; missing
+data ambiguity is provisional or insufficient, never Mixed. Stagflationary Option B requires hot
+inflation plus broad moderate weakness in both growth and labor, or severe weakness in either, unless
+growth and labor diverge. Inflationary Expansion / Reflation requires hot inflation with resilient
+activity and no divergence; it does not claim demand overheating or identify the cause of inflation.
+
+Data Quality describes input-source quality using a fixed denominator. Regime Clarity describes
+classification support and sensitivity. Neither is a probability, confidence estimate, forecast, or
+backtest result. The daily report is a deterministic rules brief, not AI-generated.
 
 ## Local Setup
 
@@ -74,10 +93,11 @@ cadence-aware Next.js caching: Mempool 300 seconds, daily feeds at least 3600 se
 
 ## API
 
-- `GET /api/market-data` returns the normalized observations, provenance, coverage-aware scores,
-  optional regime/playbook, and generation time.
-- `GET /api/ai-report` returns a deterministic rules brief from the same normalized service. It
-  does not call an AI model and returns a coverage brief if the regime is withheld.
+- `GET /api/market-data` returns normalized observations and provenance, the five monitoring scores,
+  a structured `regime` assessment (status, nullable label/clarity, Data Quality, factor readiness,
+  rule diagnostics and sensitivity), and nullable `researchImplications`.
+- `GET /api/ai-report` returns a deterministic rules brief from the same service, including status,
+  Data Quality, Regime Clarity, monitoring signals, and a coverage brief when the regime is withheld.
 
 ## Deploy On Netlify
 

@@ -50,8 +50,14 @@ describe("getDashboardPayload", () => {
     expect(payload.observations.usdidr.detail).toContain("not BI JISDOR or tradable spot FX");
     expect(payload.observations.mempoolVsize.detail).toContain("blockspace demand proxy");
     expect(payload.scores).toHaveLength(5);
-    expect(payload.regime).not.toBeNull();
-    expect(payload.playbook).not.toBeNull();
+    expect(payload.regime).toMatchObject({
+      assessmentStatus: "INSUFFICIENT_DATA",
+      regime: null,
+      dataQuality: 0,
+      regimeClarity: null,
+    });
+    expect(payload.researchImplications).toBeNull();
+    expect(Object.values(payload.regime.factorReadiness).every((factor) => !factor.classifiable)).toBe(true);
     expect(JSON.stringify(payload)).not.toContain("fixture-secret-not-real");
   });
 

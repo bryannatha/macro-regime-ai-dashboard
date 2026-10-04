@@ -2,14 +2,17 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type {
-  AssetPlaybook,
   CategoryScore,
   DashboardPayload,
   MetricObservation,
   ObservationKey,
-  RegimeAssessment,
+  RegimeInputs,
+  RegimeFactorKey,
   ScoreKey,
 } from "@/lib/types";
+import { evaluateRegime } from "@/lib/regime";
+import { createUnconfiguredRegimeInputs } from "@/lib/market-data/regime-inputs";
+import { getResearchImplications } from "@/lib/playbook";
 import { observationFreshness, ObservationTable, RegimeDashboard } from "./regime-dashboard";
 
 const keys: ObservationKey[] = [
@@ -88,8 +91,45 @@ function payload(): DashboardPayload {
     dataAsOf: "2026-10-02",
     observations: Object.fromEntries(keys.map((key) => [key, makeObservation(key)])) as DashboardPayload["observations"],
     scores,
-    regime: null,
-    playbook: null,
+    regime: evaluateRegime(createUnconfiguredRegimeInputs()),
+    researchImplications: null,
+  };
+}
+
+function resolvedInputs(): RegimeInputs {
+  const factor = (score: number) => ({
+    bounds: { lower: score, upper: score },
+    coverage: 1,
+    eligibleFamilies: 2,
+    historyYears: 10,
+    releaseQuality: 1,
+  });
+  const factors: Record<RegimeFactorKey, ReturnType<typeof factor>> = {
+    inflation: factor(30),
+    growth: factor(25),
+    labor: factor(30),
+    policyRates: factor(30),
+    creditConditions: factor(25),
+    liquidityProxy: factor(35),
+  };
+  return {
+    factors,
+    native: {
+      deltaPi: 0,
+      realPolicyRate: 1,
+      deltaR: 0,
+      deltaTarget: 0,
+      deltaP: 0,
+      worseningMomenta: 0,
+    },
+    qualitySlots: Array.from({ length: 6 }, () => ({
+      weight: 1 / 6,
+      eligible: true,
+      freshness: 1,
+      history: 0.55,
+      release: 1,
+      fetchHealth: 1,
+    })),
   };
 }
 
@@ -100,6 +140,11 @@ describe("source-aware regime dashboard", () => {
     const sources = renderToStaticMarkup(<ObservationTable payload={data} />);
 
     expect(markup).toContain("Regime withheld");
+    expect(markup).toContain("Insufficient data");
+    expect(markup).toContain("Data Quality");
+    expect(markup).toContain("Regime Clarity");
+    expect(markup).toContain("System Liquidity Proxy");
+    expect(markup).toContain("monitoring indicator");
     expect(markup).toContain("Educational research tool, not financial advice.");
     expect(markup).not.toContain("Synthetic fixture");
     expect(markup).not.toContain("Stablecoins USD bn");
@@ -128,33 +173,26 @@ describe("source-aware regime dashboard", () => {
     expect(observationFreshness(makeObservation("goldPrice"), reference)).toBe("excluded");
   });
 
-  it("shows the rules-based playbook only when a regime is classified", () => {
+  it("shows research implications only when a regime is resolved", () => {
     const data = payload();
-    const assessment: RegimeAssessment = {
-      regime: "Liquidity Reflation",
-      confidence: 68,
-      rationale: ["Liquidity is supportive.", "Blockspace demand is a limited proxy."],
-    };
-    const playbook: AssetPlaybook = {
-      regime: assessment.regime,
-      thesis: "Selective risk context.",
-      favor: ["Liquid growth assets"],
-      reduce: ["Excess leverage"],
-      neutral: ["Oil"],
-    };
-    data.regime = assessment;
-    data.playbook = playbook;
+    expect(renderToStaticMarkup(<RegimeDashboard payload={data} />)).toContain("Withheld until a core regime is resolved");
+
+    data.regime = evaluateRegime(resolvedInputs());
+    data.researchImplications = getResearchImplications("GOLDILOCKS");
     const markup = renderToStaticMarkup(<RegimeDashboard payload={data} />);
 
-    expect(markup).toContain("Liquidity Reflation");
-    expect(markup).toContain("Liquid growth assets");
-    expect(markup).not.toContain("No regime, no playbook");
+    expect(markup).toContain("Goldilocks");
+    expect(markup).toContain("Research themes");
+    expect(markup).toContain("Counter-signals");
+    expect(markup).not.toContain("Asset playbook");
+    expect(markup).not.toContain("Research areas to favor");
+    expect(markup).not.toContain("Research areas to reduce");
   });
 
   it("shows a score's coverage and uses N/A rather than zero when withheld", () => {
     const markup = renderToStaticMarkup(<RegimeDashboard payload={payload()} />);
 
-    expect(markup).toContain("35% coverage");
+    expect(markup).toContain("35% indicator coverage");
     expect(markup).toContain("N/A");
     expect(markup).not.toContain("0 / 100");
   });

@@ -29,6 +29,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { REGIME_LABELS } from "@/lib/regime";
 import { SCORING_MODEL } from "@/lib/scoring";
 import type {
   AIReport,
@@ -37,6 +38,7 @@ import type {
   MetricObservation,
   ObservationKey,
   Regime,
+  RegimeFactorKey,
   ScoreKey,
   ScoreOrientation,
 } from "@/lib/types";
@@ -121,12 +123,24 @@ const tooltipStyle = {
   fontSize: "12px",
 };
 
-const requiredCore: ScoreKey[] = [
-  "inflationPressure",
-  "growthStress",
-  "liquidity",
-  "cryptoDemand",
+const regimeFactorOrder: RegimeFactorKey[] = [
+  "inflation", "growth", "labor", "policyRates", "creditConditions", "liquidityProxy",
 ];
+
+const regimeFactorLabels: Record<RegimeFactorKey, string> = {
+  inflation: "Inflation",
+  growth: "Growth",
+  labor: "Labor",
+  policyRates: "Policy / Rates",
+  creditConditions: "Credit Conditions",
+  liquidityProxy: "System Liquidity Proxy",
+};
+
+const assessmentStatusLabels = {
+  NORMAL: "Normal",
+  PROVISIONAL: "Provisional",
+  INSUFFICIENT_DATA: "Insufficient data",
+} as const;
 
 export function observationFreshness(observation: MetricObservation, referenceTime: string): Freshness {
   if (observation.status === "excluded") return "excluded";
@@ -340,7 +354,7 @@ function OverviewView({
       </section>
       <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
         <ObservationCharts observations={payload.observations} />
-        <PlaybookCard payload={payload} />
+        <ResearchImplicationsCard payload={payload} />
       </section>
       <ReportCard
         error={reportError}
@@ -353,46 +367,48 @@ function OverviewView({
 }
 
 function RegimeSummary({ payload }: { payload: DashboardPayload }) {
-  const coreScores = requiredCore.map((key) => payload.scores.find((score) => score.key === key)).filter(Boolean) as CategoryScore[];
+  const assessment = payload.regime;
+  const selectedRegime = assessment.regime;
+  const resolved = selectedRegime !== null;
   return (
     <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
       <Card className={cn(
         "overflow-hidden border-slate-800 bg-slate-950 text-white shadow-none",
-        !payload.regime && "border-amber-300 bg-amber-50 text-slate-900",
+        !resolved && "border-amber-300 bg-amber-50 text-slate-900",
       )}>
         <div className="grid gap-6 p-5 sm:grid-cols-[1fr_auto] sm:items-center sm:p-6">
           <div>
             <div className="mb-3 flex flex-wrap items-center gap-2">
-              <span className={cn("text-[10px] font-semibold uppercase tracking-[0.18em]", payload.regime ? "text-teal-300" : "text-amber-800")}>Current regime</span>
-              <Badge variant={payload.regime ? "outline" : "caution"} className={payload.regime ? "border-white/20 bg-white/5 text-slate-300" : ""}>
-                {payload.regime ? "Rules classification" : "Core coverage required"}
+              <span className={cn("text-[10px] font-semibold uppercase tracking-[0.18em]", resolved ? "text-teal-300" : "text-amber-800")}>U.S. macro regime</span>
+              <Badge variant={resolved ? "outline" : "caution"} className={resolved ? "border-white/20 bg-white/5 text-slate-300" : ""}>
+                {assessmentStatusLabels[assessment.assessmentStatus]}
               </Badge>
             </div>
             <h3 className="text-3xl font-semibold tracking-tight sm:text-[34px]">
-              {payload.regime?.regime ?? "Regime withheld"}
+              {selectedRegime ? REGIME_LABELS[selectedRegime] : "Regime withheld"}
             </h3>
-            <p className={cn("mt-3 max-w-2xl text-sm leading-6", payload.regime ? "text-slate-300" : "text-slate-700")}>
-              {payload.regime
-                ? payload.regime.rationale[0]
-                : "Inflation, growth, liquidity, and crypto blockspace scores each need at least 60% input coverage. No default regime is substituted."}
+            <p className={cn("mt-3 max-w-2xl text-sm leading-6", resolved ? "text-slate-300" : "text-slate-700")}>
+              {resolved
+                ? "A deterministic classification from the approved six-factor U.S. macro framework. It is descriptive research context, not a forecast."
+                : "The six approved core factors are not source-mapped with sufficient coverage yet. The monitoring indicators below are not substitutes, so no regime is assigned."}
             </p>
           </div>
-          {payload.regime ? (
-            <div className="min-w-[148px] rounded-md border border-white/10 bg-white/[0.04] p-4">
-              <div className="text-[10px] font-medium uppercase tracking-[0.15em] text-slate-400">Heuristic confidence</div>
-              <div className="tabular mt-2 font-mono text-3xl font-semibold">{payload.regime.confidence}<span className="text-lg text-slate-400">%</span></div>
-              <div className="mt-1 text-[10px] text-slate-500">Not calibrated or backtested</div>
+          <div className={cn("grid min-w-[220px] grid-cols-2 gap-2 rounded-md border p-3", resolved ? "border-white/10 bg-white/[0.04]" : "border-amber-200 bg-white/70")}>
+            <div>
+              <div className={cn("text-[9px] font-medium uppercase tracking-[0.12em]", resolved ? "text-slate-400" : "text-amber-800")}>Data Quality</div>
+              <div className="tabular mt-1 font-mono text-2xl font-semibold">{assessment.dataQuality ?? "N/A"}<span className="text-xs text-slate-400"> / 100</span></div>
             </div>
-          ) : (
-            <div className="min-w-[148px] rounded-md border border-amber-200 bg-white/70 p-4">
-              <div className="text-[10px] font-medium uppercase tracking-[0.15em] text-amber-800">Required inputs</div>
-              <div className="mt-2 text-xs font-semibold text-slate-800">4 core categories</div>
-              <div className="mt-1 text-[10px] text-slate-500">Each at 60%+ coverage</div>
+            <div>
+              <div className={cn("text-[9px] font-medium uppercase tracking-[0.12em]", resolved ? "text-slate-400" : "text-amber-800")}>Regime Clarity</div>
+              <div className="tabular mt-1 font-mono text-2xl font-semibold">{assessment.regimeClarity ?? "N/A"}<span className="text-xs text-slate-400"> / 100</span></div>
             </div>
-          )}
+            <div className={cn("col-span-2 border-t pt-2 text-[9px] leading-4", resolved ? "border-white/10 text-slate-400" : "border-amber-200 text-slate-500")}>
+              Separate measures; clarity is not probability or confidence.
+            </div>
+          </div>
         </div>
-        <div className={cn("flex flex-col gap-2 border-t px-5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between sm:px-6", payload.regime ? "border-white/10 text-slate-300" : "border-amber-200 text-slate-700")}>
-          <span>{payload.regime?.rationale[1] ?? "Scores and regime thresholds are provisional heuristics, not a forecast."}</span>
+        <div className={cn("flex flex-col gap-2 border-t px-5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between sm:px-6", resolved ? "border-white/10 text-slate-300" : "border-amber-200 text-slate-700")}>
+          <span>{resolved ? `Sensitivity: ${assessment.sensitivity?.classification ?? "not available"}. Thresholds are provisional and not backtested.` : "Monitoring scores remain useful independently; the regime stays withheld until its factor contract is met."}</span>
           <span className="font-mono text-[10px] uppercase tracking-wide opacity-70">As of {formatDate(payload.dataAsOf)}</span>
         </div>
       </Card>
@@ -401,19 +417,22 @@ function RegimeSummary({ payload }: { payload: DashboardPayload }) {
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between gap-3">
             <CardTitle className="text-sm">Core data coverage</CardTitle>
-            <Badge variant="outline" className="text-[10px]">60% minimum</Badge>
+            <Badge variant="outline" className="text-[10px]">60% + 2 families</Badge>
           </div>
-          <CardDescription>Coverage is available configured input weight; missing data is not zero.</CardDescription>
+          <CardDescription>Core-factor readiness is separate from the five dashboard monitoring indicators.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          {coreScores.map((score) => (
-            <div className="flex items-center gap-3" key={score.key}>
-              <span className={cn("h-2 w-2 rounded-full", score.score === null ? "bg-amber-500" : "bg-teal-500")} />
-              <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-700">{score.label}</span>
-              <span className="tabular font-mono text-xs text-slate-500">{score.coveragePercent}%</span>
-              <span className="min-w-[76px] text-right text-[10px] text-slate-500">{score.score === null ? "Withheld" : `${score.score}/100`}</span>
-            </div>
-          ))}
+          {regimeFactorOrder.map((key) => {
+            const factor = assessment.factorReadiness[key];
+            return (
+              <div className="flex items-center gap-3" key={key}>
+                <span className={cn("h-2 w-2 rounded-full", factor.classifiable ? "bg-teal-500" : "bg-amber-500")} />
+                <span className="min-w-0 flex-1 truncate text-xs font-medium text-slate-700">{regimeFactorLabels[key]}</span>
+                <span className="tabular font-mono text-[10px] text-slate-500">{Math.round(factor.coverage * 100)}% · {factor.eligibleFamilies}/2</span>
+                <span className="min-w-[54px] text-right text-[10px] text-slate-500">{factor.classifiable ? "Ready" : "Withheld"}</span>
+              </div>
+            );
+          })}
         </CardContent>
       </Card>
     </section>
@@ -439,63 +458,59 @@ function ScoreCard({ score }: { score: CategoryScore }) {
           {score.score !== null && <div className={cn("h-full rounded-full", theme.bar)} style={{ width: `${score.score}%` }} />}
         </div>
         <p className="mt-2 min-h-[30px] text-[10px] leading-[15px] text-slate-500" title={score.explanation}>
-          {score.coveragePercent}% coverage · {score.score === null ? "60% needed" : "available inputs reweighted"}
+          {score.coveragePercent}% indicator coverage · monitoring only
         </p>
       </CardContent>
     </Card>
   );
 }
 
-function PlaybookCard({ payload }: { payload: DashboardPayload }) {
-  const playbook = payload.playbook;
+function ResearchImplicationsCard({ payload }: { payload: DashboardPayload }) {
+  const implications = payload.researchImplications;
   return (
     <Card className="border-slate-200 shadow-none">
       <CardHeader className="pb-3">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-teal-700" />
-          <CardTitle className="text-sm">Asset playbook</CardTitle>
-          {playbook && <Badge variant="outline" className="ml-auto text-[10px]">{playbook.regime}</Badge>}
+          <CardTitle className="text-sm">Research Implications</CardTitle>
+          {implications && <Badge variant="outline" className="ml-auto text-[10px]">{REGIME_LABELS[implications.regime]}</Badge>}
         </div>
-        <CardDescription>{playbook?.thesis ?? "Withheld until required core score coverage supports a regime classification."}</CardDescription>
+        <CardDescription>{implications?.thesis ?? "Withheld until a core regime is resolved. Existing monitor scores and overlays are not classifier inputs."}</CardDescription>
       </CardHeader>
       <CardContent>
-        {playbook ? (
-          <div className="space-y-3">
-            <PlaybookGroup label="Research areas to favor" items={playbook.favor} tone="positive" />
-            <PlaybookGroup label="Keep neutral" items={playbook.neutral} tone="neutral" />
-            <PlaybookGroup label="Research areas to reduce" items={playbook.reduce} tone="caution" />
+        {implications ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ResearchGroup label="Research themes" items={implications.researchThemes} />
+            <ResearchGroup label="Counter-signals" items={implications.counterSignals} />
+            <ResearchGroup label="Overlay context" items={implications.overlayContext} />
+            <ResearchGroup label="Uncertainties" items={implications.uncertainties} />
+            <ResearchGroup label="Guardrails" items={implications.guardrails} />
           </div>
         ) : (
           <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-5 text-center text-xs text-slate-500">
-            No regime, no playbook. This panel does not fill missing data with a default scenario.
+            No regime is assigned from the available feeds. No implication is inferred from missing data.
           </div>
         )}
-        <p className="mt-4 border-t border-slate-100 pt-3 text-[10px] leading-4 text-slate-400">Scenario context only. No weights, timing, or personalized allocation.</p>
+        <p className="mt-4 border-t border-slate-100 pt-3 text-[10px] leading-4 text-slate-400">Descriptive research questions and limitations only; no asset allocation or trading instructions.</p>
       </CardContent>
     </Card>
   );
 }
 
-function PlaybookGroup({
+function ResearchGroup({
   items,
   label,
-  tone,
 }: {
   items: string[];
   label: string;
-  tone: "positive" | "neutral" | "caution";
 }) {
-  const theme = {
-    positive: "border-teal-100 bg-teal-50/70 text-teal-900",
-    neutral: "border-slate-100 bg-slate-50 text-slate-700",
-    caution: "border-amber-100 bg-amber-50/70 text-amber-900",
-  }[tone];
   return (
-    <div>
+    <div className="rounded-md border border-slate-100 bg-slate-50/70 p-3">
       <div className="mb-1.5 text-[9px] font-semibold uppercase tracking-[0.15em] text-slate-400">{label}</div>
-      <div className="flex flex-wrap gap-1.5">
-        {items.map((item) => <span className={cn("rounded border px-2 py-1 text-[10px]", theme)} key={item}>{item}</span>)}
-      </div>
+      <ul className="space-y-1.5">
+        {items.map((item) => <li className="flex gap-2 text-[10px] leading-4 text-slate-600" key={item}><span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-teal-600" />{item}</li>)}
+        {!items.length && <li className="text-[10px] text-slate-400">None registered.</li>}
+      </ul>
     </div>
   );
 }
@@ -531,12 +546,14 @@ function ReportCard({
           <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
             <div>
               <div className="flex flex-wrap items-center gap-2">
-                <Badge variant={report.regime ? "positive" : "caution"}>{report.regime ?? "Regime withheld"}</Badge>
+                <Badge variant={report.regime ? "positive" : "caution"}>{report.regime ? REGIME_LABELS[report.regime] : "Regime withheld"}</Badge>
                 <span className="text-[10px] text-slate-400">Generated {formatDate(report.generatedAt, true)} WIB</span>
               </div>
               <h3 className="mt-2 text-sm font-semibold text-slate-800">{report.title}</h3>
               <p className="mt-1.5 text-xs leading-5 text-slate-600">{report.executiveSummary}</p>
-              <p className="mt-3 text-[10px] text-slate-400">Latest input date: {formatDate(report.dataAsOf)} · ruleset output</p>
+              <p className="mt-3 text-[10px] text-slate-400">
+                Latest input date: {formatDate(report.dataAsOf)} · {assessmentStatusLabels[report.assessmentStatus]} · Data Quality {report.dataQuality ?? "N/A"}/100 · Regime Clarity {report.regimeClarity ?? "N/A"}/100
+              </p>
             </div>
             <div className="grid content-start gap-4 sm:grid-cols-2">
               <ReportList items={report.signals} label="Key readings" />
@@ -692,25 +709,25 @@ function ObservationChart({ observation }: { observation: MetricObservation }) {
 
 function MethodView({ payload }: { payload: DashboardPayload }) {
   const rules: Array<[Regime, string]> = [
-    ["Hard Landing", "Growth stress ≥ 68, liquidity < 42, inflation < 62"],
-    ["Stagflation", "Inflation ≥ 62 and growth stress ≥ 55"],
-    ["Commodity Inflation", "Inflation ≥ 60 and observed Brent ≥ $85"],
-    ["Fiat Debasement", "Liquidity ≥ 64, crypto score ≥ 63, and observed gold ≥ $2,850"],
-    ["Liquidity Reflation", "Liquidity ≥ 52 and crypto score ≥ 54"],
-    ["Goldilocks", "Residual state after the four core categories have adequate coverage"],
+    ["GOLDILOCKS", "I≤45, G≤45, L≤50, P≤55; real policy rate≤1.50pp; rate, target and policy changes pass guardrails; C≤50 or Q≤55; C<65 and Q<70; all factors<80; Δπ<0.30pp; fewer than3 worsening momenta; no divergence."],
+    ["INFLATIONARY_EXPANSION", "HOT: I≥60 or (I≥50 and Δπ≥0.30pp); RESILIENT: (G≤45 and L≤50) or (L≤45 and G≤50); no activity/labor divergence."],
+    ["STAGFLATIONARY", "HOT and ((G≥55 and L≥55) or G≥65 or L≥65); no activity/labor divergence. Severe joint weakness adds a contraction-level qualifier."],
+    ["CONTRACTION_RECESSIONARY", "G≥65 and L≥60, outside HOT inflation. Not official recession dating."],
+    ["DISINFLATIONARY_SLOWDOWN", "I≤45, Δπ<0.30pp; G≥50 or L≥55; not resilient, severe joint weakness, or activity/labor divergence."],
+    ["MIXED", "Resolved evidence with no named gate, or a proved activity/labor divergence. Missing-data ambiguity remains provisional, never Mixed."],
   ];
   return (
     <>
       <Card className="border-amber-200 bg-amber-50/70 shadow-none">
         <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
-          <div className="flex shrink-0 items-center gap-2 text-xs font-semibold text-amber-900"><ShieldAlert className="h-4 w-4" /> Provisional model</div>
-          <p className="text-xs leading-5 text-amber-900/80">Linear bounds and fixed thresholds are illustrative, not calibrated forecasts. The rules have not been backtested. Scores below 60% input-weight coverage are withheld.</p>
+          <div className="flex shrink-0 items-center gap-2 text-xs font-semibold text-amber-900"><ShieldAlert className="h-4 w-4" /> Research framework</div>
+          <p className="text-xs leading-5 text-amber-900/80">Thresholds are transparent policy choices, not calibrated forecasts. No historical validation or predictive performance is claimed. Data Quality and Regime Clarity measure different things.</p>
         </CardContent>
       </Card>
       <Card className="border-slate-200 shadow-none">
         <CardHeader>
-          <CardTitle className="text-sm">Score construction</CardTitle>
-          <CardDescription>Each available input is linearly scaled between its bounds and clamped to 0–100. Present weights are renormalized only when coverage is at least 60%.</CardDescription>
+          <CardTitle className="text-sm">Monitoring indicator construction</CardTitle>
+          <CardDescription>These five public-feed cards are separate monitoring signals. Their scores are not mapped into or substituted for the six-factor regime classifier.</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 xl:grid-cols-2">
           {(Object.keys(SCORING_MODEL) as ScoreKey[]).map((key) => {
@@ -736,22 +753,45 @@ function MethodView({ payload }: { payload: DashboardPayload }) {
         </CardContent>
       </Card>
       <Card className="border-slate-200 shadow-none">
-        <CardHeader><CardTitle className="text-sm">Regime decision order</CardTitle><CardDescription>First matching rule wins. All four core score categories must have adequate coverage first.</CardDescription></CardHeader>
+        <CardHeader><CardTitle className="text-sm">U.S. regime gates</CardTitle><CardDescription>Unordered rules: one proven named gate assigns the label; zero proven gates with resolved evidence yields Mixed. Unknown mandatory evidence withholds the label.</CardDescription></CardHeader>
         <CardContent className="px-3 pb-3 sm:px-5">
           <Table>
-            <TableHeader><TableRow className="border-slate-100 hover:bg-transparent"><TableHead>Regime</TableHead><TableHead>Rule</TableHead><TableHead className="hidden text-right sm:table-cell">Order</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow className="border-slate-100 hover:bg-transparent"><TableHead>Regime</TableHead><TableHead>Required gates</TableHead></TableRow></TableHeader>
             <TableBody>
-              {rules.map(([regime, rule], index) => (
+              {rules.map(([regime, rule]) => (
                 <TableRow className="border-slate-100" key={regime}>
-                  <TableCell className="text-xs font-medium">{regime}</TableCell>
+                  <TableCell className="whitespace-nowrap text-xs font-medium">{REGIME_LABELS[regime]}</TableCell>
                   <TableCell className="font-mono text-[10px] text-slate-500">{rule}</TableCell>
-                  <TableCell className="hidden text-right font-mono text-[10px] text-slate-400 sm:table-cell">{String(index + 1).padStart(2, "0")}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="border-slate-200 shadow-none">
+          <CardHeader><CardTitle className="text-sm">Core factor readiness</CardTitle><CardDescription>Every factor requires at least 60% coverage and two eligible source families; anchors also need required native comparisons.</CardDescription></CardHeader>
+          <CardContent className="grid gap-2 sm:grid-cols-2">
+            {regimeFactorOrder.map((key) => {
+              const factor = payload.regime.factorReadiness[key];
+              return (
+                <div className="rounded border border-slate-100 bg-slate-50 px-3 py-2" key={key}>
+                  <div className="text-[10px] font-medium text-slate-700">{regimeFactorLabels[key]}</div>
+                  <div className="mt-1 text-[9px] text-slate-500">{Math.round(factor.coverage * 100)}% coverage · {factor.eligibleFamilies} eligible families · {factor.classifiable ? "Ready" : "Not classifiable"}</div>
+                </div>
+              );
+            })}
+          </CardContent>
+        </Card>
+        <Card className="border-slate-200 shadow-none">
+          <CardHeader><CardTitle className="text-sm">Data Quality &amp; Regime Clarity</CardTitle></CardHeader>
+          <CardContent className="space-y-3 text-xs leading-5 text-slate-600">
+            <p><strong className="text-slate-800">Data Quality</strong> summarizes source eligibility, freshness, history, release quality, and fetch health using a fixed denominator. Missing source weight is not removed.</p>
+            <p><strong className="text-slate-800">Regime Clarity</strong> combines rule support, threshold sensitivity, and residual core tensions. Defining evidence is not penalized twice; sensitivity caps apply to every regime label.</p>
+            <p>Neither is a probability, forecast, or investment signal. Unresolved missing evidence is provisional or insufficient, not Mixed.</p>
+          </CardContent>
+        </Card>
+      </div>
       <Card className="border-slate-200 shadow-none">
         <CardHeader><CardTitle className="text-sm">Source substitutions and limits</CardTitle></CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

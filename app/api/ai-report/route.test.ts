@@ -4,23 +4,31 @@ import type { CategoryScore, DashboardPayload, RegimeAssessment } from "@/lib/ty
 vi.mock("@/lib/market-data", () => ({ getDashboardPayload: vi.fn() }));
 
 import { getDashboardPayload } from "@/lib/market-data";
+import { getResearchImplications } from "@/lib/playbook";
+import { evaluateRegime } from "@/lib/regime";
+import { createUnconfiguredRegimeInputs } from "@/lib/market-data/regime-inputs";
 import { GET } from "./route";
 
 const scores: CategoryScore[] = [
-  { key: "inflationPressure", label: "Inflation pressure", score: 42, coverage: 1, coveragePercent: 100, orientation: "risk", reading: "Watch", summary: "CPI and Brent inputs.", explanation: "All inputs available." },
-  { key: "growthStress", label: "Growth stress", score: 38, coverage: 1, coveragePercent: 100, orientation: "risk", reading: "Contained", summary: "Claims and rates.", explanation: "All inputs available." },
-  { key: "liquidity", label: "Liquidity", score: 66, coverage: 1, coveragePercent: 100, orientation: "support", reading: "Strong", summary: "Broad Dollar Index and real yield.", explanation: "All inputs available." },
-  { key: "cryptoDemand", label: "Crypto demand", score: 59, coverage: 1, coveragePercent: 100, orientation: "demand", reading: "Building", summary: "On-chain blockspace demand proxy, not BTC buying pressure.", explanation: "All inputs available." },
-  { key: "indonesiaRisk", label: "Indonesia risk", score: 54, coverage: 1, coveragePercent: 100, orientation: "risk", reading: "Watch", summary: "ECB-derived USD/IDR cross.", explanation: "All inputs available." },
+  { key: "inflationPressure", label: "Inflation pressure indicator", score: 42, coverage: 1, coveragePercent: 100, orientation: "risk", reading: "Watch", summary: "CPI monitoring proxy.", explanation: "Indicator only." },
+  { key: "growthStress", label: "Growth stress indicator", score: 38, coverage: 0.65, coveragePercent: 65, orientation: "risk", reading: "Contained", summary: "Claims monitoring proxy.", explanation: "Indicator only." },
+  { key: "liquidity", label: "Liquidity indicator", score: 66, coverage: 1, coveragePercent: 100, orientation: "support", reading: "Strong", summary: "Broad dollar and real yield monitoring proxy.", explanation: "Indicator only." },
+  { key: "cryptoDemand", label: "Crypto blockspace indicator", score: 59, coverage: 1, coveragePercent: 100, orientation: "demand", reading: "Building", summary: "Blockspace proxy, not buying pressure.", explanation: "Indicator only." },
+  { key: "indonesiaRisk", label: "Indonesia FX risk indicator", score: 54, coverage: 0.75, coveragePercent: 75, orientation: "risk", reading: "Watch", summary: "ECB-derived USD/IDR cross.", explanation: "Indicator only." },
 ];
 
-const assessment: RegimeAssessment = {
-  regime: "Liquidity Reflation",
-  confidence: 68,
-  rationale: ["Liquidity inputs are supportive.", "This classification is a provisional heuristic."],
+const emptyRegime = evaluateRegime(createUnconfiguredRegimeInputs());
+const normalRegime: RegimeAssessment = {
+  ...emptyRegime,
+  assessmentStatus: "NORMAL",
+  regime: "INFLATIONARY_EXPANSION",
+  dataQuality: 91,
+  regimeClarity: 88,
+  candidates: [],
+  reasonCodes: [],
 };
 
-function dashboard(regime: DashboardPayload["regime"]): DashboardPayload {
+function dashboard(regime: RegimeAssessment = emptyRegime): DashboardPayload {
   return {
     generatedAt: "2026-10-03T12:00:00.000Z",
     dataAsOf: "2026-10-02",
@@ -30,39 +38,51 @@ function dashboard(regime: DashboardPayload["regime"]): DashboardPayload {
     } as unknown as DashboardPayload["observations"],
     scores,
     regime,
-    playbook: regime ? { regime: regime.regime, thesis: "Selective risk support.", favor: ["Quality equities"], reduce: ["Excess leverage"], neutral: ["Oil"] } : null,
+    researchImplications: regime.regime ? getResearchImplications(regime.regime) : null,
   };
 }
 
 describe("GET /api/ai-report", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("returns a source-aware rules brief without claiming AI authorship", async () => {
-    vi.mocked(getDashboardPayload).mockResolvedValue(dashboard(assessment));
+  it("returns a coverage brief when the six-factor regime inputs are unavailable", async () => {
+    vi.mocked(getDashboardPayload).mockResolvedValue(dashboard());
     const response = await GET();
     const report = await response.json();
 
     expect(response.status).toBe(200);
     expect(report).toMatchObject({
-      regime: "Liquidity Reflation",
+      regime: null,
+      assessmentStatus: "INSUFFICIENT_DATA",
+      dataQuality: 0,
+      regimeClarity: null,
       source: "rules-based",
-      dataAsOf: "2026-10-02",
     });
-    expect(report.title).toContain("Liquidity Reflation");
-    expect(report.executiveSummary).toContain("provisional");
-    expect(report.signals.join(" ")).toContain("coverage");
-    expect(report.riskNote).toContain("not AI-generated");
+    expect(report.title).toContain("Coverage");
+    expect(report.executiveSummary).toContain("monitoring indicators");
+    expect(report.executiveSummary).toMatch(/missing inputs/i);
+    expect(report.researchImplications).toBeNull();
+    expect(report.riskNote).toContain("Educational research tool, not financial advice.");
     expect(JSON.stringify(report)).not.toContain("EIA_API_KEY");
-    expect(JSON.stringify(report)).not.toContain("mock-metrics");
+    expect(JSON.stringify(report)).not.toMatch(/\b(favor|reduce)\b/i);
   });
 
-  it("returns a coverage brief instead of inventing a regime when core coverage is withheld", async () => {
-    vi.mocked(getDashboardPayload).mockResolvedValue(dashboard(null));
-    const report = await (await GET()).json();
+  it("returns descriptive regime implications without causal demand language", async () => {
+    vi.mocked(getDashboardPayload).mockResolvedValue(dashboard(normalRegime));
+    const response = await GET();
+    const report = await response.json();
 
-    expect(report.regime).toBeNull();
-    expect(report.title).toContain("Coverage");
-    expect(report.executiveSummary).toContain("withheld");
-    expect(report.source).toBe("rules-based");
+    expect(response.status).toBe(200);
+    expect(report).toMatchObject({
+      regime: "INFLATIONARY_EXPANSION",
+      assessmentStatus: "NORMAL",
+      dataQuality: 91,
+      regimeClarity: 88,
+      source: "rules-based",
+    });
+    expect(report.title).toContain("Inflationary Expansion");
+    expect(report.executiveSummary).toContain("alongside");
+    expect(report.researchImplications.counterSignals.join(" ")).toMatch(/supply or demand/i);
+    expect(JSON.stringify(report)).not.toMatch(/\b(favor|reduce)\b/i);
   });
 });

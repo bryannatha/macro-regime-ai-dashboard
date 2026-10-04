@@ -3,7 +3,6 @@ import type {
   MetricObservation,
   ObservationKey,
   ObservationMap,
-  RegimeAssessment,
   ScoreKey,
   ScoreOrientation,
 } from "@/lib/types";
@@ -141,92 +140,4 @@ export function calculateScores(observations: ObservationMap): CategoryScore[] {
       explanation,
     };
   });
-}
-
-function scoreFor(scores: CategoryScore[], key: ScoreKey): number | null {
-  const score = scores.find((item) => item.key === key);
-  return score && score.coverage >= MINIMUM_COVERAGE ? score.score : null;
-}
-
-function observedValue(observations: ObservationMap, key: ObservationKey): number | null {
-  return availableValue(observations[key]);
-}
-
-export function classifyRegime(
-  observations: ObservationMap,
-  scores: CategoryScore[],
-): RegimeAssessment | null {
-  const inflation = scoreFor(scores, "inflationPressure");
-  const growth = scoreFor(scores, "growthStress");
-  const liquidity = scoreFor(scores, "liquidity");
-  const crypto = scoreFor(scores, "cryptoDemand");
-
-  if ([inflation, growth, liquidity, crypto].some((score) => score === null)) return null;
-
-  const oil = observedValue(observations, "oil");
-  const goldPrice = observedValue(observations, "goldPrice");
-
-  if (growth! >= 68 && liquidity! < 42 && inflation! < 62) {
-    return {
-      regime: "Hard Landing",
-      confidence: clamp(62 + (growth! - liquidity!) * 0.35),
-      rationale: [
-        "Growth stress is acute while liquidity support is weak.",
-        "Defensive positioning matters more than inflation hedging.",
-      ],
-    };
-  }
-
-  if (inflation! >= 62 && growth! >= 55) {
-    return {
-      regime: "Stagflation",
-      confidence: clamp(55 + (inflation! + growth!) / 5),
-      rationale: [
-        "Inflation pressure and growth stress are elevated together.",
-        "The mix challenges both duration and cyclical risk assets.",
-      ],
-    };
-  }
-
-  if (inflation! >= 60 && oil !== null && oil >= 85) {
-    return {
-      regime: "Commodity Inflation",
-      confidence: clamp(54 + inflation! * 0.35),
-      rationale: [
-        "Elevated inflation pressure coincides with an observed Brent price above the ruleset threshold.",
-        "Import-sensitive currencies warrant closer monitoring.",
-      ],
-    };
-  }
-
-  if (liquidity! >= 64 && crypto! >= 63 && goldPrice !== null && goldPrice >= 2_850) {
-    return {
-      regime: "Fiat Debasement",
-      confidence: clamp(54 + (liquidity! + crypto!) / 6),
-      rationale: [
-        "Liquidity and the blockspace-demand proxy are elevated alongside an observed gold price above the ruleset threshold.",
-        "This heuristic combination is not a forecast of currency debasement.",
-      ],
-    };
-  }
-
-  if (liquidity! >= 52 && crypto! >= 54) {
-    return {
-      regime: "Liquidity Reflation",
-      confidence: clamp(54 + (liquidity! + crypto!) / 6),
-      rationale: [
-        "The broad-dollar, real-yield, and on-chain blockspace inputs indicate supportive liquidity conditions.",
-        "Blockspace demand does not measure BTC buying pressure or aggregate crypto flows.",
-      ],
-    };
-  }
-
-  return {
-    regime: "Goldilocks",
-    confidence: clamp(72 - inflation! * 0.25 - growth! * 0.2 + liquidity! * 0.2),
-    rationale: [
-      "No stronger regime trigger crossed its fixed threshold in this sample.",
-      "Goldilocks is the ruleset's residual classification, not a forecast.",
-    ],
-  };
 }

@@ -1,0 +1,4354 @@
+{
+  "methodologyVersion": "US-MACRO-0.3-review",
+  "reviewDate": "2026-10-04",
+  "scope": "Bounded synthetic in-memory worksheet; not application code/tests, source validation or historical validation",
+  "baselineEvidence": "2026-10-03-macro-regime-review-evidence.json",
+  "inputAliases": {
+    "pi": "deltaPi",
+    "dp": "deltaP",
+    "real": "r: ex-post real-policy proxy",
+    "realChange": "deltaR",
+    "targetChange": "deltaTarget",
+    "worsening": "count of core stress momenta >=8"
+  },
+  "inputDefaults": {
+    "pi": 0,
+    "dp": 0,
+    "real": 1,
+    "realChange": 0,
+    "targetChange": 0,
+    "worsening": 0,
+    "yoyChange": 0,
+    "creditChange": 0,
+    "qChange": 0,
+    "standards": 45,
+    "volume": 45
+  },
+  "thresholds": {
+    "iContained": 45,
+    "iHot": 60,
+    "iAccelFloor": 50,
+    "gRes": 45,
+    "lRes": 50,
+    "aWeak": 55,
+    "gSlow": 50,
+    "lSlow": 55,
+    "pMax": 55,
+    "cBenign": 50,
+    "qBenign": 55,
+    "cVeto": 65,
+    "qVeto": 70,
+    "extreme": 80,
+    "lContract": 60,
+    "aSevere": 65
+  },
+  "nativeThresholds": {
+    "realMax": 1.5,
+    "realChangeMax": 0.5,
+    "targetChangeMax": 0.5,
+    "piAcceleration": 0.3
+  },
+  "qualityAssumptions": {
+    "eligible": 1,
+    "freshness": 1,
+    "referenceHistoryCompleteness": 0.55,
+    "releaseMetadata": 1,
+    "fetchHealth": 1,
+    "runtimeSufficient": true,
+    "atLeastFiveYearReference": true,
+    "dataQuality": 91
+  },
+  "formulas": {
+    "clarityRaw": ".45*W+.35*B+.20*(100-X)",
+    "rounding": "Clip 0..100, round integer, then sensitivity cap",
+    "caps": {
+      "ROBUST": 100,
+      "MODERATELY_SENSITIVE": 69,
+      "FRAGILE": 49
+    },
+    "mixedDivergence": ".40*low(min(G,L),45)+.40*high(max(G,L),55)+.20*clip(60+2*(abs(G-L)-10),0,100)",
+    "mixedRestrictive": ".25*low(I,45)+.35*resilientSupport+.40*max(proved policy violation supports)",
+    "mixedIntermediate": "40+20*clip(2*min(I-45,U-I)/(U-45),0,1), U=50 if deltaPi>=.30 else60",
+    "mixedNoEnvelope": 50,
+    "configurationDefectSupport": 0,
+    "stagflationaryB": "HOT && ((G>=55 && L>=55) || G>=65 || L>=65) && !ACTIVITY_DIVERGENCE"
+  },
+  "fixtures": [
+    {
+      "name": "Contained resilient",
+      "inputs": {
+        "I": 30,
+        "G": 25,
+        "L": 30,
+        "P": 30,
+        "C": 25,
+        "Q": 35
+      },
+      "result": "GOLDILOCKS",
+      "proved": [
+        "GOLDILOCKS"
+      ],
+      "reasons": [],
+      "hot": false,
+      "resilient": true,
+      "divergent": false,
+      "severe": false,
+      "activitySeverity": "NOT_CONTRACTION_LEVEL",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "B": 100,
+      "robustness": "ROBUST",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 97.5,
+          "INFLATIONARY_EXPANSION": 60,
+          "STAGFLATIONARY": 10,
+          "CONTRACTION_RECESSIONARY": 0,
+          "DISINFLATIONARY_SLOWDOWN": 50
+        },
+        "mixedSupports": {},
+        "selectedSupportReason": null,
+        "W": 97.5,
+        "B": 100,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 98.875,
+        "regimeClarity": 99,
+        "cap": 100
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "GOLDILOCKS",
+        "iContained:5": "GOLDILOCKS",
+        "iHot:-5": "GOLDILOCKS",
+        "iHot:5": "GOLDILOCKS",
+        "iAccelFloor:-5": "GOLDILOCKS",
+        "iAccelFloor:5": "GOLDILOCKS",
+        "gRes:-5": "GOLDILOCKS",
+        "gRes:5": "GOLDILOCKS",
+        "lRes:-5": "GOLDILOCKS",
+        "lRes:5": "GOLDILOCKS",
+        "aWeak:-5": "GOLDILOCKS",
+        "aWeak:5": "GOLDILOCKS",
+        "gSlow:-5": "GOLDILOCKS",
+        "gSlow:5": "GOLDILOCKS",
+        "lSlow:-5": "GOLDILOCKS",
+        "lSlow:5": "GOLDILOCKS",
+        "pMax:-5": "GOLDILOCKS",
+        "pMax:5": "GOLDILOCKS",
+        "cBenign:-5": "GOLDILOCKS",
+        "cBenign:5": "GOLDILOCKS",
+        "qBenign:-5": "GOLDILOCKS",
+        "qBenign:5": "GOLDILOCKS",
+        "cVeto:-5": "GOLDILOCKS",
+        "cVeto:5": "GOLDILOCKS",
+        "qVeto:-5": "GOLDILOCKS",
+        "qVeto:5": "GOLDILOCKS",
+        "extreme:-5": "GOLDILOCKS",
+        "extreme:5": "GOLDILOCKS",
+        "lContract:-5": "GOLDILOCKS",
+        "lContract:5": "GOLDILOCKS",
+        "aSevere:-5": "GOLDILOCKS",
+        "aSevere:5": "GOLDILOCKS",
+        "all:-5": "GOLDILOCKS",
+        "all:5": "GOLDILOCKS"
+      },
+      "severityChanges": []
+    },
+    {
+      "name": "Inflation before policy response",
+      "inputs": {
+        "I": 75,
+        "G": 25,
+        "L": 25,
+        "P": 20,
+        "C": 20,
+        "Q": 20,
+        "pi": 0.8
+      },
+      "result": "INFLATIONARY_EXPANSION",
+      "proved": [
+        "INFLATIONARY_EXPANSION"
+      ],
+      "reasons": [],
+      "hot": true,
+      "resilient": true,
+      "divergent": false,
+      "severe": false,
+      "activitySeverity": "NOT_CONTRACTION_LEVEL",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "B": 100,
+      "robustness": "ROBUST",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 75,
+          "INFLATIONARY_EXPANSION": 95,
+          "STAGFLATIONARY": 45,
+          "CONTRACTION_RECESSIONARY": 0,
+          "DISINFLATIONARY_SLOWDOWN": 5
+        },
+        "mixedSupports": {},
+        "selectedSupportReason": null,
+        "W": 95,
+        "B": 100,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 97.75,
+        "regimeClarity": 98,
+        "cap": 100
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "INFLATIONARY_EXPANSION",
+        "iContained:5": "INFLATIONARY_EXPANSION",
+        "iHot:-5": "INFLATIONARY_EXPANSION",
+        "iHot:5": "INFLATIONARY_EXPANSION",
+        "iAccelFloor:-5": "INFLATIONARY_EXPANSION",
+        "iAccelFloor:5": "INFLATIONARY_EXPANSION",
+        "gRes:-5": "INFLATIONARY_EXPANSION",
+        "gRes:5": "INFLATIONARY_EXPANSION",
+        "lRes:-5": "INFLATIONARY_EXPANSION",
+        "lRes:5": "INFLATIONARY_EXPANSION",
+        "aWeak:-5": "INFLATIONARY_EXPANSION",
+        "aWeak:5": "INFLATIONARY_EXPANSION",
+        "gSlow:-5": "INFLATIONARY_EXPANSION",
+        "gSlow:5": "INFLATIONARY_EXPANSION",
+        "lSlow:-5": "INFLATIONARY_EXPANSION",
+        "lSlow:5": "INFLATIONARY_EXPANSION",
+        "pMax:-5": "INFLATIONARY_EXPANSION",
+        "pMax:5": "INFLATIONARY_EXPANSION",
+        "cBenign:-5": "INFLATIONARY_EXPANSION",
+        "cBenign:5": "INFLATIONARY_EXPANSION",
+        "qBenign:-5": "INFLATIONARY_EXPANSION",
+        "qBenign:5": "INFLATIONARY_EXPANSION",
+        "cVeto:-5": "INFLATIONARY_EXPANSION",
+        "cVeto:5": "INFLATIONARY_EXPANSION",
+        "qVeto:-5": "INFLATIONARY_EXPANSION",
+        "qVeto:5": "INFLATIONARY_EXPANSION",
+        "extreme:-5": "INFLATIONARY_EXPANSION",
+        "extreme:5": "INFLATIONARY_EXPANSION",
+        "lContract:-5": "INFLATIONARY_EXPANSION",
+        "lContract:5": "INFLATIONARY_EXPANSION",
+        "aSevere:-5": "INFLATIONARY_EXPANSION",
+        "aSevere:5": "INFLATIONARY_EXPANSION",
+        "all:-5": "INFLATIONARY_EXPANSION",
+        "all:5": "INFLATIONARY_EXPANSION"
+      },
+      "severityChanges": []
+    },
+    {
+      "name": "High but cooling inflation expansion",
+      "inputs": {
+        "I": 85,
+        "G": 25,
+        "L": 30,
+        "P": 30,
+        "C": 25,
+        "Q": 25,
+        "pi": -1.2
+      },
+      "result": "INFLATIONARY_EXPANSION",
+      "proved": [
+        "INFLATIONARY_EXPANSION"
+      ],
+      "reasons": [],
+      "hot": true,
+      "resilient": true,
+      "divergent": false,
+      "severe": false,
+      "activitySeverity": "NOT_CONTRACTION_LEVEL",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "B": 100,
+      "robustness": "ROBUST",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 75,
+          "INFLATIONARY_EXPANSION": 100,
+          "STAGFLATIONARY": 50,
+          "CONTRACTION_RECESSIONARY": 0,
+          "DISINFLATIONARY_SLOWDOWN": 5
+        },
+        "mixedSupports": {},
+        "selectedSupportReason": null,
+        "W": 100,
+        "B": 100,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 100,
+        "regimeClarity": 100,
+        "cap": 100
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "INFLATIONARY_EXPANSION",
+        "iContained:5": "INFLATIONARY_EXPANSION",
+        "iHot:-5": "INFLATIONARY_EXPANSION",
+        "iHot:5": "INFLATIONARY_EXPANSION",
+        "iAccelFloor:-5": "INFLATIONARY_EXPANSION",
+        "iAccelFloor:5": "INFLATIONARY_EXPANSION",
+        "gRes:-5": "INFLATIONARY_EXPANSION",
+        "gRes:5": "INFLATIONARY_EXPANSION",
+        "lRes:-5": "INFLATIONARY_EXPANSION",
+        "lRes:5": "INFLATIONARY_EXPANSION",
+        "aWeak:-5": "INFLATIONARY_EXPANSION",
+        "aWeak:5": "INFLATIONARY_EXPANSION",
+        "gSlow:-5": "INFLATIONARY_EXPANSION",
+        "gSlow:5": "INFLATIONARY_EXPANSION",
+        "lSlow:-5": "INFLATIONARY_EXPANSION",
+        "lSlow:5": "INFLATIONARY_EXPANSION",
+        "pMax:-5": "INFLATIONARY_EXPANSION",
+        "pMax:5": "INFLATIONARY_EXPANSION",
+        "cBenign:-5": "INFLATIONARY_EXPANSION",
+        "cBenign:5": "INFLATIONARY_EXPANSION",
+        "qBenign:-5": "INFLATIONARY_EXPANSION",
+        "qBenign:5": "INFLATIONARY_EXPANSION",
+        "cVeto:-5": "INFLATIONARY_EXPANSION",
+        "cVeto:5": "INFLATIONARY_EXPANSION",
+        "qVeto:-5": "INFLATIONARY_EXPANSION",
+        "qVeto:5": "INFLATIONARY_EXPANSION",
+        "extreme:-5": "INFLATIONARY_EXPANSION",
+        "extreme:5": "INFLATIONARY_EXPANSION",
+        "lContract:-5": "INFLATIONARY_EXPANSION",
+        "lContract:5": "INFLATIONARY_EXPANSION",
+        "aSevere:-5": "INFLATIONARY_EXPANSION",
+        "aSevere:5": "INFLATIONARY_EXPANSION",
+        "all:-5": "INFLATIONARY_EXPANSION",
+        "all:5": "INFLATIONARY_EXPANSION"
+      },
+      "severityChanges": []
+    },
+    {
+      "name": "Stagflation with calm finance",
+      "inputs": {
+        "I": 75,
+        "G": 65,
+        "L": 65,
+        "P": 20,
+        "C": 20,
+        "Q": 20,
+        "pi": 0
+      },
+      "result": "STAGFLATIONARY",
+      "proved": [
+        "STAGFLATIONARY"
+      ],
+      "reasons": [],
+      "hot": true,
+      "resilient": false,
+      "divergent": false,
+      "severe": true,
+      "activitySeverity": "CONTRACTION_LEVEL",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "B": 100,
+      "robustness": "ROBUST",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 48.5,
+          "INFLATIONARY_EXPANSION": 55,
+          "STAGFLATIONARY": 85,
+          "CONTRACTION_RECESSIONARY": 65,
+          "DISINFLATIONARY_SLOWDOWN": 45
+        },
+        "mixedSupports": {},
+        "selectedSupportReason": null,
+        "W": 85,
+        "B": 100,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 93.25,
+        "regimeClarity": 93,
+        "cap": 100
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "STAGFLATIONARY",
+        "iContained:5": "STAGFLATIONARY",
+        "iHot:-5": "STAGFLATIONARY",
+        "iHot:5": "STAGFLATIONARY",
+        "iAccelFloor:-5": "STAGFLATIONARY",
+        "iAccelFloor:5": "STAGFLATIONARY",
+        "gRes:-5": "STAGFLATIONARY",
+        "gRes:5": "STAGFLATIONARY",
+        "lRes:-5": "STAGFLATIONARY",
+        "lRes:5": "STAGFLATIONARY",
+        "aWeak:-5": "STAGFLATIONARY",
+        "aWeak:5": "STAGFLATIONARY",
+        "gSlow:-5": "STAGFLATIONARY",
+        "gSlow:5": "STAGFLATIONARY",
+        "lSlow:-5": "STAGFLATIONARY",
+        "lSlow:5": "STAGFLATIONARY",
+        "pMax:-5": "STAGFLATIONARY",
+        "pMax:5": "STAGFLATIONARY",
+        "cBenign:-5": "STAGFLATIONARY",
+        "cBenign:5": "STAGFLATIONARY",
+        "qBenign:-5": "STAGFLATIONARY",
+        "qBenign:5": "STAGFLATIONARY",
+        "cVeto:-5": "STAGFLATIONARY",
+        "cVeto:5": "STAGFLATIONARY",
+        "qVeto:-5": "STAGFLATIONARY",
+        "qVeto:5": "STAGFLATIONARY",
+        "extreme:-5": "STAGFLATIONARY",
+        "extreme:5": "STAGFLATIONARY",
+        "lContract:-5": "STAGFLATIONARY",
+        "lContract:5": "STAGFLATIONARY",
+        "aSevere:-5": "STAGFLATIONARY",
+        "aSevere:5": "STAGFLATIONARY",
+        "all:-5": "STAGFLATIONARY",
+        "all:5": "STAGFLATIONARY"
+      },
+      "severityChanges": [
+        {
+          "id": "aSevere:5",
+          "activitySeverity": "NOT_CONTRACTION_LEVEL"
+        },
+        {
+          "id": "all:5",
+          "activitySeverity": "NOT_CONTRACTION_LEVEL"
+        }
+      ]
+    },
+    {
+      "name": "Cooling stagflation",
+      "inputs": {
+        "I": 85,
+        "G": 70,
+        "L": 65,
+        "P": 30,
+        "C": 25,
+        "Q": 25,
+        "pi": -1.2
+      },
+      "result": "STAGFLATIONARY",
+      "proved": [
+        "STAGFLATIONARY"
+      ],
+      "reasons": [],
+      "hot": true,
+      "resilient": false,
+      "divergent": false,
+      "severe": true,
+      "activitySeverity": "CONTRACTION_LEVEL",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "B": 100,
+      "robustness": "ROBUST",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 46.5,
+          "INFLATIONARY_EXPANSION": 60,
+          "STAGFLATIONARY": 90,
+          "CONTRACTION_RECESSIONARY": 70,
+          "DISINFLATIONARY_SLOWDOWN": 50
+        },
+        "mixedSupports": {},
+        "selectedSupportReason": null,
+        "W": 90,
+        "B": 100,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 95.5,
+        "regimeClarity": 96,
+        "cap": 100
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "STAGFLATIONARY",
+        "iContained:5": "STAGFLATIONARY",
+        "iHot:-5": "STAGFLATIONARY",
+        "iHot:5": "STAGFLATIONARY",
+        "iAccelFloor:-5": "STAGFLATIONARY",
+        "iAccelFloor:5": "STAGFLATIONARY",
+        "gRes:-5": "STAGFLATIONARY",
+        "gRes:5": "STAGFLATIONARY",
+        "lRes:-5": "STAGFLATIONARY",
+        "lRes:5": "STAGFLATIONARY",
+        "aWeak:-5": "STAGFLATIONARY",
+        "aWeak:5": "STAGFLATIONARY",
+        "gSlow:-5": "STAGFLATIONARY",
+        "gSlow:5": "STAGFLATIONARY",
+        "lSlow:-5": "STAGFLATIONARY",
+        "lSlow:5": "STAGFLATIONARY",
+        "pMax:-5": "STAGFLATIONARY",
+        "pMax:5": "STAGFLATIONARY",
+        "cBenign:-5": "STAGFLATIONARY",
+        "cBenign:5": "STAGFLATIONARY",
+        "qBenign:-5": "STAGFLATIONARY",
+        "qBenign:5": "STAGFLATIONARY",
+        "cVeto:-5": "STAGFLATIONARY",
+        "cVeto:5": "STAGFLATIONARY",
+        "qVeto:-5": "STAGFLATIONARY",
+        "qVeto:5": "STAGFLATIONARY",
+        "extreme:-5": "STAGFLATIONARY",
+        "extreme:5": "STAGFLATIONARY",
+        "lContract:-5": "STAGFLATIONARY",
+        "lContract:5": "STAGFLATIONARY",
+        "aSevere:-5": "STAGFLATIONARY",
+        "aSevere:5": "STAGFLATIONARY",
+        "all:-5": "STAGFLATIONARY",
+        "all:5": "STAGFLATIONARY"
+      },
+      "severityChanges": []
+    },
+    {
+      "name": "Severe weakness and low inflation",
+      "inputs": {
+        "I": 30,
+        "G": 85,
+        "L": 80,
+        "P": 30,
+        "C": 20,
+        "Q": 20
+      },
+      "result": "CONTRACTION_RECESSIONARY",
+      "proved": [
+        "CONTRACTION_RECESSIONARY"
+      ],
+      "reasons": [],
+      "hot": false,
+      "resilient": false,
+      "divergent": false,
+      "severe": true,
+      "activitySeverity": "CONTRACTION_LEVEL",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "B": 100,
+      "robustness": "ROBUST",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 62.5,
+          "INFLATIONARY_EXPANSION": 10,
+          "STAGFLATIONARY": 60,
+          "CONTRACTION_RECESSIONARY": 100,
+          "DISINFLATIONARY_SLOWDOWN": 95
+        },
+        "mixedSupports": {},
+        "selectedSupportReason": null,
+        "W": 100,
+        "B": 100,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 100,
+        "regimeClarity": 100,
+        "cap": 100
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "CONTRACTION_RECESSIONARY",
+        "iContained:5": "CONTRACTION_RECESSIONARY",
+        "iHot:-5": "CONTRACTION_RECESSIONARY",
+        "iHot:5": "CONTRACTION_RECESSIONARY",
+        "iAccelFloor:-5": "CONTRACTION_RECESSIONARY",
+        "iAccelFloor:5": "CONTRACTION_RECESSIONARY",
+        "gRes:-5": "CONTRACTION_RECESSIONARY",
+        "gRes:5": "CONTRACTION_RECESSIONARY",
+        "lRes:-5": "CONTRACTION_RECESSIONARY",
+        "lRes:5": "CONTRACTION_RECESSIONARY",
+        "aWeak:-5": "CONTRACTION_RECESSIONARY",
+        "aWeak:5": "CONTRACTION_RECESSIONARY",
+        "gSlow:-5": "CONTRACTION_RECESSIONARY",
+        "gSlow:5": "CONTRACTION_RECESSIONARY",
+        "lSlow:-5": "CONTRACTION_RECESSIONARY",
+        "lSlow:5": "CONTRACTION_RECESSIONARY",
+        "pMax:-5": "CONTRACTION_RECESSIONARY",
+        "pMax:5": "CONTRACTION_RECESSIONARY",
+        "cBenign:-5": "CONTRACTION_RECESSIONARY",
+        "cBenign:5": "CONTRACTION_RECESSIONARY",
+        "qBenign:-5": "CONTRACTION_RECESSIONARY",
+        "qBenign:5": "CONTRACTION_RECESSIONARY",
+        "cVeto:-5": "CONTRACTION_RECESSIONARY",
+        "cVeto:5": "CONTRACTION_RECESSIONARY",
+        "qVeto:-5": "CONTRACTION_RECESSIONARY",
+        "qVeto:5": "CONTRACTION_RECESSIONARY",
+        "extreme:-5": "CONTRACTION_RECESSIONARY",
+        "extreme:5": "CONTRACTION_RECESSIONARY",
+        "lContract:-5": "CONTRACTION_RECESSIONARY",
+        "lContract:5": "CONTRACTION_RECESSIONARY",
+        "aSevere:-5": "CONTRACTION_RECESSIONARY",
+        "aSevere:5": "CONTRACTION_RECESSIONARY",
+        "all:-5": "CONTRACTION_RECESSIONARY",
+        "all:5": "CONTRACTION_RECESSIONARY"
+      },
+      "severityChanges": []
+    },
+    {
+      "name": "Disinflationary slowdown",
+      "inputs": {
+        "I": 30,
+        "G": 58,
+        "L": 52,
+        "P": 50,
+        "C": 45,
+        "Q": 45,
+        "pi": -0.5
+      },
+      "result": "DISINFLATIONARY_SLOWDOWN",
+      "proved": [
+        "DISINFLATIONARY_SLOWDOWN"
+      ],
+      "reasons": [],
+      "hot": false,
+      "resilient": false,
+      "divergent": false,
+      "severe": false,
+      "activitySeverity": "NOT_CONTRACTION_LEVEL",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "B": 100,
+      "robustness": "ROBUST",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 67.2,
+          "INFLATIONARY_EXPANSION": 32,
+          "STAGFLATIONARY": 37,
+          "CONTRACTION_RECESSIONARY": 45,
+          "DISINFLATIONARY_SLOWDOWN": 83
+        },
+        "mixedSupports": {},
+        "selectedSupportReason": null,
+        "W": 83,
+        "B": 100,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 92.35,
+        "regimeClarity": 92,
+        "cap": 100
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "DISINFLATIONARY_SLOWDOWN",
+        "iContained:5": "DISINFLATIONARY_SLOWDOWN",
+        "iHot:-5": "DISINFLATIONARY_SLOWDOWN",
+        "iHot:5": "DISINFLATIONARY_SLOWDOWN",
+        "iAccelFloor:-5": "DISINFLATIONARY_SLOWDOWN",
+        "iAccelFloor:5": "DISINFLATIONARY_SLOWDOWN",
+        "gRes:-5": "DISINFLATIONARY_SLOWDOWN",
+        "gRes:5": "DISINFLATIONARY_SLOWDOWN",
+        "lRes:-5": "DISINFLATIONARY_SLOWDOWN",
+        "lRes:5": "DISINFLATIONARY_SLOWDOWN",
+        "aWeak:-5": "DISINFLATIONARY_SLOWDOWN",
+        "aWeak:5": "DISINFLATIONARY_SLOWDOWN",
+        "gSlow:-5": "DISINFLATIONARY_SLOWDOWN",
+        "gSlow:5": "DISINFLATIONARY_SLOWDOWN",
+        "lSlow:-5": "DISINFLATIONARY_SLOWDOWN",
+        "lSlow:5": "DISINFLATIONARY_SLOWDOWN",
+        "pMax:-5": "DISINFLATIONARY_SLOWDOWN",
+        "pMax:5": "DISINFLATIONARY_SLOWDOWN",
+        "cBenign:-5": "DISINFLATIONARY_SLOWDOWN",
+        "cBenign:5": "DISINFLATIONARY_SLOWDOWN",
+        "qBenign:-5": "DISINFLATIONARY_SLOWDOWN",
+        "qBenign:5": "DISINFLATIONARY_SLOWDOWN",
+        "cVeto:-5": "DISINFLATIONARY_SLOWDOWN",
+        "cVeto:5": "DISINFLATIONARY_SLOWDOWN",
+        "qVeto:-5": "DISINFLATIONARY_SLOWDOWN",
+        "qVeto:5": "DISINFLATIONARY_SLOWDOWN",
+        "extreme:-5": "DISINFLATIONARY_SLOWDOWN",
+        "extreme:5": "DISINFLATIONARY_SLOWDOWN",
+        "lContract:-5": "DISINFLATIONARY_SLOWDOWN",
+        "lContract:5": "DISINFLATIONARY_SLOWDOWN",
+        "aSevere:-5": "DISINFLATIONARY_SLOWDOWN",
+        "aSevere:5": "DISINFLATIONARY_SLOWDOWN",
+        "all:-5": "DISINFLATIONARY_SLOWDOWN",
+        "all:5": "DISINFLATIONARY_SLOWDOWN"
+      },
+      "severityChanges": []
+    },
+    {
+      "name": "High quality contradiction",
+      "inputs": {
+        "I": 75,
+        "G": 25,
+        "L": 70,
+        "P": 50,
+        "C": 40,
+        "Q": 40,
+        "pi": 0.8
+      },
+      "result": "MIXED",
+      "proved": [],
+      "reasons": [
+        "activity_labor_divergence"
+      ],
+      "hot": true,
+      "resilient": false,
+      "divergent": true,
+      "severe": false,
+      "activitySeverity": "NOT_CONTRACTION_LEVEL",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "B": 100,
+      "robustness": "ROBUST",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 54,
+          "INFLATIONARY_EXPANSION": 55,
+          "STAGFLATIONARY": 80,
+          "CONTRACTION_RECESSIONARY": 40,
+          "DISINFLATIONARY_SLOWDOWN": 45
+        },
+        "mixedSupports": {
+          "activity_labor_divergence": 96
+        },
+        "selectedSupportReason": "activity_labor_divergence",
+        "W": 96,
+        "B": 100,
+        "X": 0,
+        "tensions": [
+          {
+            "code": "activity_labor_divergence",
+            "severity": 70,
+            "defining": true
+          }
+        ],
+        "clarityRaw": 98.2,
+        "regimeClarity": 98,
+        "cap": 100
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "MIXED",
+        "iContained:5": "MIXED",
+        "iHot:-5": "MIXED",
+        "iHot:5": "MIXED",
+        "iAccelFloor:-5": "MIXED",
+        "iAccelFloor:5": "MIXED",
+        "gRes:-5": "MIXED",
+        "gRes:5": "MIXED",
+        "lRes:-5": "MIXED",
+        "lRes:5": "MIXED",
+        "aWeak:-5": "MIXED",
+        "aWeak:5": "MIXED",
+        "gSlow:-5": "MIXED",
+        "gSlow:5": "MIXED",
+        "lSlow:-5": "MIXED",
+        "lSlow:5": "MIXED",
+        "pMax:-5": "MIXED",
+        "pMax:5": "MIXED",
+        "cBenign:-5": "MIXED",
+        "cBenign:5": "MIXED",
+        "qBenign:-5": "MIXED",
+        "qBenign:5": "MIXED",
+        "cVeto:-5": "MIXED",
+        "cVeto:5": "MIXED",
+        "qVeto:-5": "MIXED",
+        "qVeto:5": "MIXED",
+        "extreme:-5": "MIXED",
+        "extreme:5": "MIXED",
+        "lContract:-5": "MIXED",
+        "lContract:5": "MIXED",
+        "aSevere:-5": "MIXED",
+        "aSevere:5": "MIXED",
+        "all:-5": "MIXED",
+        "all:5": "MIXED"
+      },
+      "severityChanges": []
+    },
+    {
+      "name": "Restrictive policy",
+      "inputs": {
+        "I": 30,
+        "G": 25,
+        "L": 30,
+        "P": 75,
+        "C": 25,
+        "Q": 25,
+        "real": 3
+      },
+      "result": "MIXED",
+      "proved": [],
+      "reasons": [
+        "restrictive_expansion"
+      ],
+      "hot": false,
+      "resilient": true,
+      "divergent": false,
+      "severe": false,
+      "activitySeverity": "NOT_CONTRACTION_LEVEL",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "B": 100,
+      "robustness": "ROBUST",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 77.5,
+          "INFLATIONARY_EXPANSION": 60,
+          "STAGFLATIONARY": 10,
+          "CONTRACTION_RECESSIONARY": 0,
+          "DISINFLATIONARY_SLOWDOWN": 50
+        },
+        "mixedSupports": {
+          "restrictive_expansion": 97.5
+        },
+        "selectedSupportReason": "restrictive_expansion",
+        "W": 97.5,
+        "B": 100,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 98.875,
+        "regimeClarity": 99,
+        "cap": 100
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "MIXED",
+        "iContained:5": "MIXED",
+        "iHot:-5": "MIXED",
+        "iHot:5": "MIXED",
+        "iAccelFloor:-5": "MIXED",
+        "iAccelFloor:5": "MIXED",
+        "gRes:-5": "MIXED",
+        "gRes:5": "MIXED",
+        "lRes:-5": "MIXED",
+        "lRes:5": "MIXED",
+        "aWeak:-5": "MIXED",
+        "aWeak:5": "MIXED",
+        "gSlow:-5": "MIXED",
+        "gSlow:5": "MIXED",
+        "lSlow:-5": "MIXED",
+        "lSlow:5": "MIXED",
+        "pMax:-5": "MIXED",
+        "pMax:5": "MIXED",
+        "cBenign:-5": "MIXED",
+        "cBenign:5": "MIXED",
+        "qBenign:-5": "MIXED",
+        "qBenign:5": "MIXED",
+        "cVeto:-5": "MIXED",
+        "cVeto:5": "MIXED",
+        "qVeto:-5": "MIXED",
+        "qVeto:5": "MIXED",
+        "extreme:-5": "MIXED",
+        "extreme:5": "MIXED",
+        "lContract:-5": "MIXED",
+        "lContract:5": "MIXED",
+        "aSevere:-5": "MIXED",
+        "aSevere:5": "MIXED",
+        "all:-5": "MIXED",
+        "all:5": "MIXED"
+      },
+      "severityChanges": []
+    },
+    {
+      "name": "Diluted policy score",
+      "inputs": {
+        "I": 30,
+        "G": 25,
+        "L": 30,
+        "P": 50,
+        "C": 25,
+        "Q": 25,
+        "real": 3
+      },
+      "result": "MIXED",
+      "proved": [],
+      "reasons": [
+        "restrictive_expansion"
+      ],
+      "hot": false,
+      "resilient": true,
+      "divergent": false,
+      "severe": false,
+      "activitySeverity": "NOT_CONTRACTION_LEVEL",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "B": 100,
+      "robustness": "ROBUST",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 90,
+          "INFLATIONARY_EXPANSION": 60,
+          "STAGFLATIONARY": 10,
+          "CONTRACTION_RECESSIONARY": 0,
+          "DISINFLATIONARY_SLOWDOWN": 50
+        },
+        "mixedSupports": {
+          "restrictive_expansion": 97.5
+        },
+        "selectedSupportReason": "restrictive_expansion",
+        "W": 97.5,
+        "B": 100,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 98.875,
+        "regimeClarity": 99,
+        "cap": 100
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "MIXED",
+        "iContained:5": "MIXED",
+        "iHot:-5": "MIXED",
+        "iHot:5": "MIXED",
+        "iAccelFloor:-5": "MIXED",
+        "iAccelFloor:5": "MIXED",
+        "gRes:-5": "MIXED",
+        "gRes:5": "MIXED",
+        "lRes:-5": "MIXED",
+        "lRes:5": "MIXED",
+        "aWeak:-5": "MIXED",
+        "aWeak:5": "MIXED",
+        "gSlow:-5": "MIXED",
+        "gSlow:5": "MIXED",
+        "lSlow:-5": "MIXED",
+        "lSlow:5": "MIXED",
+        "pMax:-5": "MIXED",
+        "pMax:5": "MIXED",
+        "cBenign:-5": "MIXED",
+        "cBenign:5": "MIXED",
+        "qBenign:-5": "MIXED",
+        "qBenign:5": "MIXED",
+        "cVeto:-5": "MIXED",
+        "cVeto:5": "MIXED",
+        "qVeto:-5": "MIXED",
+        "qVeto:5": "MIXED",
+        "extreme:-5": "MIXED",
+        "extreme:5": "MIXED",
+        "lContract:-5": "MIXED",
+        "lContract:5": "MIXED",
+        "aSevere:-5": "MIXED",
+        "aSevere:5": "MIXED",
+        "all:-5": "MIXED",
+        "all:5": "MIXED"
+      },
+      "severityChanges": []
+    },
+    {
+      "name": "Fast real tightening",
+      "inputs": {
+        "I": 30,
+        "G": 25,
+        "L": 30,
+        "P": 50,
+        "C": 25,
+        "Q": 25,
+        "real": 1.2,
+        "realChange": 0.8
+      },
+      "result": "MIXED",
+      "proved": [],
+      "reasons": [
+        "restrictive_expansion"
+      ],
+      "hot": false,
+      "resilient": true,
+      "divergent": false,
+      "severe": false,
+      "activitySeverity": "NOT_CONTRACTION_LEVEL",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "B": 100,
+      "robustness": "ROBUST",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 90,
+          "INFLATIONARY_EXPANSION": 60,
+          "STAGFLATIONARY": 10,
+          "CONTRACTION_RECESSIONARY": 0,
+          "DISINFLATIONARY_SLOWDOWN": 50
+        },
+        "mixedSupports": {
+          "restrictive_expansion": 91.1
+        },
+        "selectedSupportReason": "restrictive_expansion",
+        "W": 91.1,
+        "B": 100,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 95.995,
+        "regimeClarity": 96,
+        "cap": 100
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "MIXED",
+        "iContained:5": "MIXED",
+        "iHot:-5": "MIXED",
+        "iHot:5": "MIXED",
+        "iAccelFloor:-5": "MIXED",
+        "iAccelFloor:5": "MIXED",
+        "gRes:-5": "MIXED",
+        "gRes:5": "MIXED",
+        "lRes:-5": "MIXED",
+        "lRes:5": "MIXED",
+        "aWeak:-5": "MIXED",
+        "aWeak:5": "MIXED",
+        "gSlow:-5": "MIXED",
+        "gSlow:5": "MIXED",
+        "lSlow:-5": "MIXED",
+        "lSlow:5": "MIXED",
+        "pMax:-5": "MIXED",
+        "pMax:5": "MIXED",
+        "cBenign:-5": "MIXED",
+        "cBenign:5": "MIXED",
+        "qBenign:-5": "MIXED",
+        "qBenign:5": "MIXED",
+        "cVeto:-5": "MIXED",
+        "cVeto:5": "MIXED",
+        "qVeto:-5": "MIXED",
+        "qVeto:5": "MIXED",
+        "extreme:-5": "MIXED",
+        "extreme:5": "MIXED",
+        "lContract:-5": "MIXED",
+        "lContract:5": "MIXED",
+        "aSevere:-5": "MIXED",
+        "aSevere:5": "MIXED",
+        "all:-5": "MIXED",
+        "all:5": "MIXED"
+      },
+      "severityChanges": []
+    },
+    {
+      "name": "Credit stress despite liquidity",
+      "inputs": {
+        "I": 30,
+        "G": 25,
+        "L": 30,
+        "P": 30,
+        "C": 79,
+        "Q": 25
+      },
+      "result": "MIXED",
+      "proved": [],
+      "reasons": [
+        "no_positive_envelope"
+      ],
+      "hot": false,
+      "resilient": true,
+      "divergent": false,
+      "severe": false,
+      "activitySeverity": "NOT_CONTRACTION_LEVEL",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "B": 100,
+      "robustness": "ROBUST",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 97.5,
+          "INFLATIONARY_EXPANSION": 60,
+          "STAGFLATIONARY": 10,
+          "CONTRACTION_RECESSIONARY": 0,
+          "DISINFLATIONARY_SLOWDOWN": 50
+        },
+        "mixedSupports": {
+          "no_positive_envelope": 50
+        },
+        "selectedSupportReason": "no_positive_envelope",
+        "W": 50,
+        "B": 100,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 77.5,
+        "regimeClarity": 78,
+        "cap": 100
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "MIXED",
+        "iContained:5": "MIXED",
+        "iHot:-5": "MIXED",
+        "iHot:5": "MIXED",
+        "iAccelFloor:-5": "MIXED",
+        "iAccelFloor:5": "MIXED",
+        "gRes:-5": "MIXED",
+        "gRes:5": "MIXED",
+        "lRes:-5": "MIXED",
+        "lRes:5": "MIXED",
+        "aWeak:-5": "MIXED",
+        "aWeak:5": "MIXED",
+        "gSlow:-5": "MIXED",
+        "gSlow:5": "MIXED",
+        "lSlow:-5": "MIXED",
+        "lSlow:5": "MIXED",
+        "pMax:-5": "MIXED",
+        "pMax:5": "MIXED",
+        "cBenign:-5": "MIXED",
+        "cBenign:5": "MIXED",
+        "qBenign:-5": "MIXED",
+        "qBenign:5": "MIXED",
+        "cVeto:-5": "MIXED",
+        "cVeto:5": "MIXED",
+        "qVeto:-5": "MIXED",
+        "qVeto:5": "MIXED",
+        "extreme:-5": "MIXED",
+        "extreme:5": "MIXED",
+        "lContract:-5": "MIXED",
+        "lContract:5": "MIXED",
+        "aSevere:-5": "MIXED",
+        "aSevere:5": "MIXED",
+        "all:-5": "MIXED",
+        "all:5": "MIXED"
+      },
+      "severityChanges": []
+    },
+    {
+      "name": "Boundary Goldilocks",
+      "inputs": {
+        "I": 45,
+        "G": 45,
+        "L": 50,
+        "P": 55,
+        "C": 50,
+        "Q": 55
+      },
+      "result": "GOLDILOCKS",
+      "proved": [
+        "GOLDILOCKS"
+      ],
+      "reasons": [],
+      "hot": false,
+      "resilient": true,
+      "divergent": false,
+      "severe": false,
+      "activitySeverity": "NOT_CONTRACTION_LEVEL",
+      "same": 28,
+      "total": 34,
+      "singleAgreement": 0.84375,
+      "coherentAgreement": 0.5,
+      "B": 50,
+      "robustness": "FRAGILE",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 60,
+          "INFLATIONARY_EXPANSION": 54,
+          "STAGFLATIONARY": 44,
+          "CONTRACTION_RECESSIONARY": 30,
+          "DISINFLATIONARY_SLOWDOWN": 55
+        },
+        "mixedSupports": {},
+        "selectedSupportReason": null,
+        "W": 60,
+        "B": 50,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 64.5,
+        "regimeClarity": 49,
+        "cap": 49
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "MIXED",
+        "iContained:5": "GOLDILOCKS",
+        "iHot:-5": "GOLDILOCKS",
+        "iHot:5": "GOLDILOCKS",
+        "iAccelFloor:-5": "GOLDILOCKS",
+        "iAccelFloor:5": "GOLDILOCKS",
+        "gRes:-5": "MIXED",
+        "gRes:5": "GOLDILOCKS",
+        "lRes:-5": "MIXED",
+        "lRes:5": "GOLDILOCKS",
+        "aWeak:-5": "MIXED",
+        "aWeak:5": "GOLDILOCKS",
+        "gSlow:-5": "GOLDILOCKS",
+        "gSlow:5": "GOLDILOCKS",
+        "lSlow:-5": "GOLDILOCKS",
+        "lSlow:5": "GOLDILOCKS",
+        "pMax:-5": "MIXED",
+        "pMax:5": "GOLDILOCKS",
+        "cBenign:-5": "GOLDILOCKS",
+        "cBenign:5": "GOLDILOCKS",
+        "qBenign:-5": "GOLDILOCKS",
+        "qBenign:5": "GOLDILOCKS",
+        "cVeto:-5": "GOLDILOCKS",
+        "cVeto:5": "GOLDILOCKS",
+        "qVeto:-5": "GOLDILOCKS",
+        "qVeto:5": "GOLDILOCKS",
+        "extreme:-5": "GOLDILOCKS",
+        "extreme:5": "GOLDILOCKS",
+        "lContract:-5": "GOLDILOCKS",
+        "lContract:5": "GOLDILOCKS",
+        "aSevere:-5": "GOLDILOCKS",
+        "aSevere:5": "GOLDILOCKS",
+        "all:-5": "MIXED",
+        "all:5": "GOLDILOCKS"
+      },
+      "severityChanges": []
+    },
+    {
+      "name": "Inflation floor acceleration",
+      "inputs": {
+        "I": 52,
+        "G": 25,
+        "L": 30,
+        "P": 20,
+        "C": 20,
+        "Q": 20,
+        "pi": 0.8
+      },
+      "result": "INFLATIONARY_EXPANSION",
+      "proved": [
+        "INFLATIONARY_EXPANSION"
+      ],
+      "reasons": [],
+      "hot": true,
+      "resilient": true,
+      "divergent": false,
+      "severe": false,
+      "activitySeverity": "NOT_CONTRACTION_LEVEL",
+      "same": 32,
+      "total": 34,
+      "singleAgreement": 0.96875,
+      "coherentAgreement": 0.5,
+      "B": 50,
+      "robustness": "FRAGILE",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 86.5,
+          "INFLATIONARY_EXPANSION": 82,
+          "STAGFLATIONARY": 32,
+          "CONTRACTION_RECESSIONARY": 0,
+          "DISINFLATIONARY_SLOWDOWN": 28
+        },
+        "mixedSupports": {},
+        "selectedSupportReason": null,
+        "W": 82,
+        "B": 50,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 74.4,
+        "regimeClarity": 49,
+        "cap": 49
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "INFLATIONARY_EXPANSION",
+        "iContained:5": "INFLATIONARY_EXPANSION",
+        "iHot:-5": "INFLATIONARY_EXPANSION",
+        "iHot:5": "INFLATIONARY_EXPANSION",
+        "iAccelFloor:-5": "INFLATIONARY_EXPANSION",
+        "iAccelFloor:5": "MIXED",
+        "gRes:-5": "INFLATIONARY_EXPANSION",
+        "gRes:5": "INFLATIONARY_EXPANSION",
+        "lRes:-5": "INFLATIONARY_EXPANSION",
+        "lRes:5": "INFLATIONARY_EXPANSION",
+        "aWeak:-5": "INFLATIONARY_EXPANSION",
+        "aWeak:5": "INFLATIONARY_EXPANSION",
+        "gSlow:-5": "INFLATIONARY_EXPANSION",
+        "gSlow:5": "INFLATIONARY_EXPANSION",
+        "lSlow:-5": "INFLATIONARY_EXPANSION",
+        "lSlow:5": "INFLATIONARY_EXPANSION",
+        "pMax:-5": "INFLATIONARY_EXPANSION",
+        "pMax:5": "INFLATIONARY_EXPANSION",
+        "cBenign:-5": "INFLATIONARY_EXPANSION",
+        "cBenign:5": "INFLATIONARY_EXPANSION",
+        "qBenign:-5": "INFLATIONARY_EXPANSION",
+        "qBenign:5": "INFLATIONARY_EXPANSION",
+        "cVeto:-5": "INFLATIONARY_EXPANSION",
+        "cVeto:5": "INFLATIONARY_EXPANSION",
+        "qVeto:-5": "INFLATIONARY_EXPANSION",
+        "qVeto:5": "INFLATIONARY_EXPANSION",
+        "extreme:-5": "INFLATIONARY_EXPANSION",
+        "extreme:5": "INFLATIONARY_EXPANSION",
+        "lContract:-5": "INFLATIONARY_EXPANSION",
+        "lContract:5": "INFLATIONARY_EXPANSION",
+        "aSevere:-5": "INFLATIONARY_EXPANSION",
+        "aSevere:5": "INFLATIONARY_EXPANSION",
+        "all:-5": "INFLATIONARY_EXPANSION",
+        "all:5": "MIXED"
+      },
+      "severityChanges": []
+    },
+    {
+      "name": "Reflation below stress floor",
+      "inputs": {
+        "I": 25,
+        "G": 25,
+        "L": 30,
+        "P": 20,
+        "C": 20,
+        "Q": 20,
+        "pi": 0.8
+      },
+      "result": "MIXED",
+      "proved": [],
+      "reasons": [
+        "no_positive_envelope"
+      ],
+      "hot": false,
+      "resilient": true,
+      "divergent": false,
+      "severe": false,
+      "activitySeverity": "NOT_CONTRACTION_LEVEL",
+      "same": 34,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 1,
+      "B": 100,
+      "robustness": "ROBUST",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 100,
+          "INFLATIONARY_EXPANSION": 55,
+          "STAGFLATIONARY": 5,
+          "CONTRACTION_RECESSIONARY": 0,
+          "DISINFLATIONARY_SLOWDOWN": 55
+        },
+        "mixedSupports": {
+          "no_positive_envelope": 50
+        },
+        "selectedSupportReason": "no_positive_envelope",
+        "W": 50,
+        "B": 100,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 77.5,
+        "regimeClarity": 78,
+        "cap": 100
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "MIXED",
+        "iContained:5": "MIXED",
+        "iHot:-5": "MIXED",
+        "iHot:5": "MIXED",
+        "iAccelFloor:-5": "MIXED",
+        "iAccelFloor:5": "MIXED",
+        "gRes:-5": "MIXED",
+        "gRes:5": "MIXED",
+        "lRes:-5": "MIXED",
+        "lRes:5": "MIXED",
+        "aWeak:-5": "MIXED",
+        "aWeak:5": "MIXED",
+        "gSlow:-5": "MIXED",
+        "gSlow:5": "MIXED",
+        "lSlow:-5": "MIXED",
+        "lSlow:5": "MIXED",
+        "pMax:-5": "MIXED",
+        "pMax:5": "MIXED",
+        "cBenign:-5": "MIXED",
+        "cBenign:5": "MIXED",
+        "qBenign:-5": "MIXED",
+        "qBenign:5": "MIXED",
+        "cVeto:-5": "MIXED",
+        "cVeto:5": "MIXED",
+        "qVeto:-5": "MIXED",
+        "qVeto:5": "MIXED",
+        "extreme:-5": "MIXED",
+        "extreme:5": "MIXED",
+        "lContract:-5": "MIXED",
+        "lContract:5": "MIXED",
+        "aSevere:-5": "MIXED",
+        "aSevere:5": "MIXED",
+        "all:-5": "MIXED",
+        "all:5": "MIXED"
+      },
+      "severityChanges": []
+    },
+    {
+      "name": "MIXED fragile near resilient activity envelope",
+      "inputs": {
+        "I": 75,
+        "G": 54,
+        "L": 49,
+        "P": 30,
+        "C": 25,
+        "Q": 25
+      },
+      "result": "MIXED",
+      "proved": [],
+      "reasons": [
+        "no_positive_envelope"
+      ],
+      "hot": true,
+      "resilient": false,
+      "divergent": false,
+      "severe": false,
+      "activitySeverity": "NOT_CONTRACTION_LEVEL",
+      "same": 33,
+      "total": 34,
+      "singleAgreement": 1,
+      "coherentAgreement": 0.5,
+      "B": 50,
+      "robustness": "FRAGILE",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 57.7,
+          "INFLATIONARY_EXPANSION": 71,
+          "STAGFLATIONARY": 69,
+          "CONTRACTION_RECESSIONARY": 38,
+          "DISINFLATIONARY_SLOWDOWN": 34
+        },
+        "mixedSupports": {
+          "no_positive_envelope": 50
+        },
+        "selectedSupportReason": "no_positive_envelope",
+        "W": 50,
+        "B": 50,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 60,
+        "regimeClarity": 49,
+        "cap": 49
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "MIXED",
+        "iContained:5": "MIXED",
+        "iHot:-5": "MIXED",
+        "iHot:5": "MIXED",
+        "iAccelFloor:-5": "MIXED",
+        "iAccelFloor:5": "MIXED",
+        "gRes:-5": "MIXED",
+        "gRes:5": "MIXED",
+        "lRes:-5": "MIXED",
+        "lRes:5": "MIXED",
+        "aWeak:-5": "MIXED",
+        "aWeak:5": "MIXED",
+        "gSlow:-5": "MIXED",
+        "gSlow:5": "MIXED",
+        "lSlow:-5": "MIXED",
+        "lSlow:5": "MIXED",
+        "pMax:-5": "MIXED",
+        "pMax:5": "MIXED",
+        "cBenign:-5": "MIXED",
+        "cBenign:5": "MIXED",
+        "qBenign:-5": "MIXED",
+        "qBenign:5": "MIXED",
+        "cVeto:-5": "MIXED",
+        "cVeto:5": "MIXED",
+        "qVeto:-5": "MIXED",
+        "qVeto:5": "MIXED",
+        "extreme:-5": "MIXED",
+        "extreme:5": "MIXED",
+        "lContract:-5": "MIXED",
+        "lContract:5": "MIXED",
+        "aSevere:-5": "MIXED",
+        "aSevere:5": "MIXED",
+        "all:-5": "MIXED",
+        "all:5": "INFLATIONARY_EXPANSION"
+      },
+      "severityChanges": []
+    },
+    {
+      "name": "Severe one-sided growth weakness, no divergence",
+      "inputs": {
+        "I": 75,
+        "G": 70,
+        "L": 46,
+        "P": 30,
+        "C": 25,
+        "Q": 25
+      },
+      "result": "STAGFLATIONARY",
+      "proved": [
+        "STAGFLATIONARY"
+      ],
+      "reasons": [],
+      "hot": true,
+      "resilient": false,
+      "divergent": false,
+      "severe": false,
+      "activitySeverity": "NOT_CONTRACTION_LEVEL",
+      "same": 32,
+      "total": 34,
+      "singleAgreement": 0.96875,
+      "coherentAgreement": 0.5,
+      "B": 50,
+      "robustness": "FRAGILE",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 52.2,
+          "INFLATIONARY_EXPANSION": 55,
+          "STAGFLATIONARY": 80,
+          "CONTRACTION_RECESSIONARY": 51,
+          "DISINFLATIONARY_SLOWDOWN": 50
+        },
+        "mixedSupports": {},
+        "selectedSupportReason": null,
+        "W": 80,
+        "B": 50,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 73.5,
+        "regimeClarity": 49,
+        "cap": 49
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "STAGFLATIONARY",
+        "iContained:5": "STAGFLATIONARY",
+        "iHot:-5": "STAGFLATIONARY",
+        "iHot:5": "STAGFLATIONARY",
+        "iAccelFloor:-5": "STAGFLATIONARY",
+        "iAccelFloor:5": "STAGFLATIONARY",
+        "gRes:-5": "STAGFLATIONARY",
+        "gRes:5": "MIXED",
+        "lRes:-5": "STAGFLATIONARY",
+        "lRes:5": "STAGFLATIONARY",
+        "aWeak:-5": "STAGFLATIONARY",
+        "aWeak:5": "STAGFLATIONARY",
+        "gSlow:-5": "STAGFLATIONARY",
+        "gSlow:5": "STAGFLATIONARY",
+        "lSlow:-5": "STAGFLATIONARY",
+        "lSlow:5": "STAGFLATIONARY",
+        "pMax:-5": "STAGFLATIONARY",
+        "pMax:5": "STAGFLATIONARY",
+        "cBenign:-5": "STAGFLATIONARY",
+        "cBenign:5": "STAGFLATIONARY",
+        "qBenign:-5": "STAGFLATIONARY",
+        "qBenign:5": "STAGFLATIONARY",
+        "cVeto:-5": "STAGFLATIONARY",
+        "cVeto:5": "STAGFLATIONARY",
+        "qVeto:-5": "STAGFLATIONARY",
+        "qVeto:5": "STAGFLATIONARY",
+        "extreme:-5": "STAGFLATIONARY",
+        "extreme:5": "STAGFLATIONARY",
+        "lContract:-5": "STAGFLATIONARY",
+        "lContract:5": "STAGFLATIONARY",
+        "aSevere:-5": "STAGFLATIONARY",
+        "aSevere:5": "STAGFLATIONARY",
+        "all:-5": "STAGFLATIONARY",
+        "all:5": "MIXED"
+      },
+      "severityChanges": []
+    },
+    {
+      "name": "Severe one-sided labor weakness, no divergence",
+      "inputs": {
+        "I": 75,
+        "G": 46,
+        "L": 70,
+        "P": 30,
+        "C": 25,
+        "Q": 25
+      },
+      "result": "STAGFLATIONARY",
+      "proved": [
+        "STAGFLATIONARY"
+      ],
+      "reasons": [],
+      "hot": true,
+      "resilient": false,
+      "divergent": false,
+      "severe": false,
+      "activitySeverity": "NOT_CONTRACTION_LEVEL",
+      "same": 32,
+      "total": 34,
+      "singleAgreement": 0.96875,
+      "coherentAgreement": 0.5,
+      "B": 50,
+      "robustness": "FRAGILE",
+      "diagnostics": {
+        "support": {
+          "GOLDILOCKS": 54.6,
+          "INFLATIONARY_EXPANSION": 55,
+          "STAGFLATIONARY": 80,
+          "CONTRACTION_RECESSIONARY": 51,
+          "DISINFLATIONARY_SLOWDOWN": 45
+        },
+        "mixedSupports": {},
+        "selectedSupportReason": null,
+        "W": 80,
+        "B": 50,
+        "X": 0,
+        "tensions": [],
+        "clarityRaw": 73.5,
+        "regimeClarity": 49,
+        "cap": 49
+      },
+      "dataQuality": 91,
+      "cases": {
+        "iContained:-5": "STAGFLATIONARY",
+        "iContained:5": "STAGFLATIONARY",
+        "iHot:-5": "STAGFLATIONARY",
+        "iHot:5": "STAGFLATIONARY",
+        "iAccelFloor:-5": "STAGFLATIONARY",
+        "iAccelFloor:5": "STAGFLATIONARY",
+        "gRes:-5": "STAGFLATIONARY",
+        "gRes:5": "MIXED",
+        "lRes:-5": "STAGFLATIONARY",
+        "lRes:5": "STAGFLATIONARY",
+        "aWeak:-5": "STAGFLATIONARY",
+        "aWeak:5": "STAGFLATIONARY",
+        "gSlow:-5": "STAGFLATIONARY",
+        "gSlow:5": "STAGFLATIONARY",
+        "lSlow:-5": "STAGFLATIONARY",
+        "lSlow:5": "STAGFLATIONARY",
+        "pMax:-5": "STAGFLATIONARY",
+        "pMax:5": "STAGFLATIONARY",
+        "cBenign:-5": "STAGFLATIONARY",
+        "cBenign:5": "STAGFLATIONARY",
+        "qBenign:-5": "STAGFLATIONARY",
+        "qBenign:5": "STAGFLATIONARY",
+        "cVeto:-5": "STAGFLATIONARY",
+        "cVeto:5": "STAGFLATIONARY",
+        "qVeto:-5": "STAGFLATIONARY",
+        "qVeto:5": "STAGFLATIONARY",
+        "extreme:-5": "STAGFLATIONARY",
+        "extreme:5": "STAGFLATIONARY",
+        "lContract:-5": "STAGFLATIONARY",
+        "lContract:5": "STAGFLATIONARY",
+        "aSevere:-5": "STAGFLATIONARY",
+        "aSevere:5": "STAGFLATIONARY",
+        "all:-5": "STAGFLATIONARY",
+        "all:5": "MIXED"
+      },
+      "severityChanges": []
+    }
+  ],
+  "alternatives": [
+    {
+      "id": "A",
+      "name": "Mild one-sided weakness",
+      "inputs": {
+        "I": 75,
+        "G": 56,
+        "L": 49,
+        "P": 30,
+        "C": 25,
+        "Q": 25
+      },
+      "options": {
+        "A": {
+          "result": "STAGFLATIONARY",
+          "proved": [
+            "STAGFLATIONARY"
+          ],
+          "reasons": [],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 31,
+          "total": 34,
+          "singleAgreement": 0.9375,
+          "coherentAgreement": 0.5,
+          "B": 50,
+          "robustness": "FRAGILE",
+          "cases": {
+            "iContained:-5": "STAGFLATIONARY",
+            "iContained:5": "STAGFLATIONARY",
+            "iHot:-5": "STAGFLATIONARY",
+            "iHot:5": "STAGFLATIONARY",
+            "iAccelFloor:-5": "STAGFLATIONARY",
+            "iAccelFloor:5": "STAGFLATIONARY",
+            "gRes:-5": "STAGFLATIONARY",
+            "gRes:5": "MIXED",
+            "lRes:-5": "STAGFLATIONARY",
+            "lRes:5": "STAGFLATIONARY",
+            "aWeak:-5": "STAGFLATIONARY",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "STAGFLATIONARY",
+            "gSlow:5": "STAGFLATIONARY",
+            "lSlow:-5": "STAGFLATIONARY",
+            "lSlow:5": "STAGFLATIONARY",
+            "pMax:-5": "STAGFLATIONARY",
+            "pMax:5": "STAGFLATIONARY",
+            "cBenign:-5": "STAGFLATIONARY",
+            "cBenign:5": "STAGFLATIONARY",
+            "qBenign:-5": "STAGFLATIONARY",
+            "qBenign:5": "STAGFLATIONARY",
+            "cVeto:-5": "STAGFLATIONARY",
+            "cVeto:5": "STAGFLATIONARY",
+            "qVeto:-5": "STAGFLATIONARY",
+            "qVeto:5": "STAGFLATIONARY",
+            "extreme:-5": "STAGFLATIONARY",
+            "extreme:5": "STAGFLATIONARY",
+            "lContract:-5": "STAGFLATIONARY",
+            "lContract:5": "STAGFLATIONARY",
+            "aSevere:-5": "STAGFLATIONARY",
+            "aSevere:5": "STAGFLATIONARY",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        },
+        "B": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "no_positive_envelope"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 34,
+          "total": 34,
+          "singleAgreement": 1,
+          "coherentAgreement": 1,
+          "B": 100,
+          "robustness": "ROBUST",
+          "cases": {
+            "iContained:-5": "MIXED",
+            "iContained:5": "MIXED",
+            "iHot:-5": "MIXED",
+            "iHot:5": "MIXED",
+            "iAccelFloor:-5": "MIXED",
+            "iAccelFloor:5": "MIXED",
+            "gRes:-5": "MIXED",
+            "gRes:5": "MIXED",
+            "lRes:-5": "MIXED",
+            "lRes:5": "MIXED",
+            "aWeak:-5": "MIXED",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "MIXED",
+            "gSlow:5": "MIXED",
+            "lSlow:-5": "MIXED",
+            "lSlow:5": "MIXED",
+            "pMax:-5": "MIXED",
+            "pMax:5": "MIXED",
+            "cBenign:-5": "MIXED",
+            "cBenign:5": "MIXED",
+            "qBenign:-5": "MIXED",
+            "qBenign:5": "MIXED",
+            "cVeto:-5": "MIXED",
+            "cVeto:5": "MIXED",
+            "qVeto:-5": "MIXED",
+            "qVeto:5": "MIXED",
+            "extreme:-5": "MIXED",
+            "extreme:5": "MIXED",
+            "lContract:-5": "MIXED",
+            "lContract:5": "MIXED",
+            "aSevere:-5": "MIXED",
+            "aSevere:5": "MIXED",
+            "all:-5": "MIXED",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        },
+        "C": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "no_positive_envelope"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 36,
+          "total": 36,
+          "singleAgreement": 1,
+          "coherentAgreement": 1,
+          "B": 100,
+          "robustness": "ROBUST",
+          "cases": {
+            "iContained:-5": "MIXED",
+            "iContained:5": "MIXED",
+            "iHot:-5": "MIXED",
+            "iHot:5": "MIXED",
+            "iAccelFloor:-5": "MIXED",
+            "iAccelFloor:5": "MIXED",
+            "gRes:-5": "MIXED",
+            "gRes:5": "MIXED",
+            "lRes:-5": "MIXED",
+            "lRes:5": "MIXED",
+            "aWeak:-5": "MIXED",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "MIXED",
+            "gSlow:5": "MIXED",
+            "lSlow:-5": "MIXED",
+            "lSlow:5": "MIXED",
+            "pMax:-5": "MIXED",
+            "pMax:5": "MIXED",
+            "cBenign:-5": "MIXED",
+            "cBenign:5": "MIXED",
+            "qBenign:-5": "MIXED",
+            "qBenign:5": "MIXED",
+            "cVeto:-5": "MIXED",
+            "cVeto:5": "MIXED",
+            "qVeto:-5": "MIXED",
+            "qVeto:5": "MIXED",
+            "extreme:-5": "MIXED",
+            "extreme:5": "MIXED",
+            "lContract:-5": "MIXED",
+            "lContract:5": "MIXED",
+            "aSevere:-5": "MIXED",
+            "aSevere:5": "MIXED",
+            "weightedWeak:-5": "MIXED",
+            "weightedWeak:5": "MIXED",
+            "all:-5": "MIXED",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        }
+      }
+    },
+    {
+      "id": "B",
+      "name": "Moderate joint weakness",
+      "inputs": {
+        "I": 75,
+        "G": 56,
+        "L": 56,
+        "P": 30,
+        "C": 25,
+        "Q": 25
+      },
+      "options": {
+        "A": {
+          "result": "STAGFLATIONARY",
+          "proved": [
+            "STAGFLATIONARY"
+          ],
+          "reasons": [],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 32,
+          "total": 34,
+          "singleAgreement": 0.96875,
+          "coherentAgreement": 0.5,
+          "B": 50,
+          "robustness": "FRAGILE",
+          "cases": {
+            "iContained:-5": "STAGFLATIONARY",
+            "iContained:5": "STAGFLATIONARY",
+            "iHot:-5": "STAGFLATIONARY",
+            "iHot:5": "STAGFLATIONARY",
+            "iAccelFloor:-5": "STAGFLATIONARY",
+            "iAccelFloor:5": "STAGFLATIONARY",
+            "gRes:-5": "STAGFLATIONARY",
+            "gRes:5": "STAGFLATIONARY",
+            "lRes:-5": "STAGFLATIONARY",
+            "lRes:5": "STAGFLATIONARY",
+            "aWeak:-5": "STAGFLATIONARY",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "STAGFLATIONARY",
+            "gSlow:5": "STAGFLATIONARY",
+            "lSlow:-5": "STAGFLATIONARY",
+            "lSlow:5": "STAGFLATIONARY",
+            "pMax:-5": "STAGFLATIONARY",
+            "pMax:5": "STAGFLATIONARY",
+            "cBenign:-5": "STAGFLATIONARY",
+            "cBenign:5": "STAGFLATIONARY",
+            "qBenign:-5": "STAGFLATIONARY",
+            "qBenign:5": "STAGFLATIONARY",
+            "cVeto:-5": "STAGFLATIONARY",
+            "cVeto:5": "STAGFLATIONARY",
+            "qVeto:-5": "STAGFLATIONARY",
+            "qVeto:5": "STAGFLATIONARY",
+            "extreme:-5": "STAGFLATIONARY",
+            "extreme:5": "STAGFLATIONARY",
+            "lContract:-5": "STAGFLATIONARY",
+            "lContract:5": "STAGFLATIONARY",
+            "aSevere:-5": "STAGFLATIONARY",
+            "aSevere:5": "STAGFLATIONARY",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        },
+        "B": {
+          "result": "STAGFLATIONARY",
+          "proved": [
+            "STAGFLATIONARY"
+          ],
+          "reasons": [],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 32,
+          "total": 34,
+          "singleAgreement": 0.96875,
+          "coherentAgreement": 0.5,
+          "B": 50,
+          "robustness": "FRAGILE",
+          "cases": {
+            "iContained:-5": "STAGFLATIONARY",
+            "iContained:5": "STAGFLATIONARY",
+            "iHot:-5": "STAGFLATIONARY",
+            "iHot:5": "STAGFLATIONARY",
+            "iAccelFloor:-5": "STAGFLATIONARY",
+            "iAccelFloor:5": "STAGFLATIONARY",
+            "gRes:-5": "STAGFLATIONARY",
+            "gRes:5": "STAGFLATIONARY",
+            "lRes:-5": "STAGFLATIONARY",
+            "lRes:5": "STAGFLATIONARY",
+            "aWeak:-5": "STAGFLATIONARY",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "STAGFLATIONARY",
+            "gSlow:5": "STAGFLATIONARY",
+            "lSlow:-5": "STAGFLATIONARY",
+            "lSlow:5": "STAGFLATIONARY",
+            "pMax:-5": "STAGFLATIONARY",
+            "pMax:5": "STAGFLATIONARY",
+            "cBenign:-5": "STAGFLATIONARY",
+            "cBenign:5": "STAGFLATIONARY",
+            "qBenign:-5": "STAGFLATIONARY",
+            "qBenign:5": "STAGFLATIONARY",
+            "cVeto:-5": "STAGFLATIONARY",
+            "cVeto:5": "STAGFLATIONARY",
+            "qVeto:-5": "STAGFLATIONARY",
+            "qVeto:5": "STAGFLATIONARY",
+            "extreme:-5": "STAGFLATIONARY",
+            "extreme:5": "STAGFLATIONARY",
+            "lContract:-5": "STAGFLATIONARY",
+            "lContract:5": "STAGFLATIONARY",
+            "aSevere:-5": "STAGFLATIONARY",
+            "aSevere:5": "STAGFLATIONARY",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        },
+        "C": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "no_positive_envelope"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 34,
+          "total": 36,
+          "singleAgreement": 0.9705882352941176,
+          "coherentAgreement": 0.5,
+          "B": 50,
+          "robustness": "FRAGILE",
+          "cases": {
+            "iContained:-5": "MIXED",
+            "iContained:5": "MIXED",
+            "iHot:-5": "MIXED",
+            "iHot:5": "MIXED",
+            "iAccelFloor:-5": "MIXED",
+            "iAccelFloor:5": "MIXED",
+            "gRes:-5": "MIXED",
+            "gRes:5": "MIXED",
+            "lRes:-5": "MIXED",
+            "lRes:5": "MIXED",
+            "aWeak:-5": "MIXED",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "MIXED",
+            "gSlow:5": "MIXED",
+            "lSlow:-5": "MIXED",
+            "lSlow:5": "MIXED",
+            "pMax:-5": "MIXED",
+            "pMax:5": "MIXED",
+            "cBenign:-5": "MIXED",
+            "cBenign:5": "MIXED",
+            "qBenign:-5": "MIXED",
+            "qBenign:5": "MIXED",
+            "cVeto:-5": "MIXED",
+            "cVeto:5": "MIXED",
+            "qVeto:-5": "MIXED",
+            "qVeto:5": "MIXED",
+            "extreme:-5": "MIXED",
+            "extreme:5": "MIXED",
+            "lContract:-5": "MIXED",
+            "lContract:5": "MIXED",
+            "aSevere:-5": "MIXED",
+            "aSevere:5": "MIXED",
+            "weightedWeak:-5": "STAGFLATIONARY",
+            "weightedWeak:5": "MIXED",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        }
+      }
+    },
+    {
+      "id": "C",
+      "name": "Severe growth / resilient labor",
+      "inputs": {
+        "I": 75,
+        "G": 70,
+        "L": 45,
+        "P": 30,
+        "C": 25,
+        "Q": 25
+      },
+      "options": {
+        "A": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "activity_labor_divergence"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": true,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 32,
+          "total": 34,
+          "singleAgreement": 0.96875,
+          "coherentAgreement": 0.5,
+          "B": 50,
+          "robustness": "FRAGILE",
+          "cases": {
+            "iContained:-5": "MIXED",
+            "iContained:5": "MIXED",
+            "iHot:-5": "MIXED",
+            "iHot:5": "MIXED",
+            "iAccelFloor:-5": "MIXED",
+            "iAccelFloor:5": "MIXED",
+            "gRes:-5": "STAGFLATIONARY",
+            "gRes:5": "MIXED",
+            "lRes:-5": "MIXED",
+            "lRes:5": "MIXED",
+            "aWeak:-5": "MIXED",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "MIXED",
+            "gSlow:5": "MIXED",
+            "lSlow:-5": "MIXED",
+            "lSlow:5": "MIXED",
+            "pMax:-5": "MIXED",
+            "pMax:5": "MIXED",
+            "cBenign:-5": "MIXED",
+            "cBenign:5": "MIXED",
+            "qBenign:-5": "MIXED",
+            "qBenign:5": "MIXED",
+            "cVeto:-5": "MIXED",
+            "cVeto:5": "MIXED",
+            "qVeto:-5": "MIXED",
+            "qVeto:5": "MIXED",
+            "extreme:-5": "MIXED",
+            "extreme:5": "MIXED",
+            "lContract:-5": "MIXED",
+            "lContract:5": "MIXED",
+            "aSevere:-5": "MIXED",
+            "aSevere:5": "MIXED",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        },
+        "B": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "activity_labor_divergence"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": true,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 32,
+          "total": 34,
+          "singleAgreement": 0.96875,
+          "coherentAgreement": 0.5,
+          "B": 50,
+          "robustness": "FRAGILE",
+          "cases": {
+            "iContained:-5": "MIXED",
+            "iContained:5": "MIXED",
+            "iHot:-5": "MIXED",
+            "iHot:5": "MIXED",
+            "iAccelFloor:-5": "MIXED",
+            "iAccelFloor:5": "MIXED",
+            "gRes:-5": "STAGFLATIONARY",
+            "gRes:5": "MIXED",
+            "lRes:-5": "MIXED",
+            "lRes:5": "MIXED",
+            "aWeak:-5": "MIXED",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "MIXED",
+            "gSlow:5": "MIXED",
+            "lSlow:-5": "MIXED",
+            "lSlow:5": "MIXED",
+            "pMax:-5": "MIXED",
+            "pMax:5": "MIXED",
+            "cBenign:-5": "MIXED",
+            "cBenign:5": "MIXED",
+            "qBenign:-5": "MIXED",
+            "qBenign:5": "MIXED",
+            "cVeto:-5": "MIXED",
+            "cVeto:5": "MIXED",
+            "qVeto:-5": "MIXED",
+            "qVeto:5": "MIXED",
+            "extreme:-5": "MIXED",
+            "extreme:5": "MIXED",
+            "lContract:-5": "MIXED",
+            "lContract:5": "MIXED",
+            "aSevere:-5": "MIXED",
+            "aSevere:5": "MIXED",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        },
+        "C": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "activity_labor_divergence"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": true,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 35,
+          "total": 36,
+          "singleAgreement": 1,
+          "coherentAgreement": 0.5,
+          "B": 50,
+          "robustness": "FRAGILE",
+          "cases": {
+            "iContained:-5": "MIXED",
+            "iContained:5": "MIXED",
+            "iHot:-5": "MIXED",
+            "iHot:5": "MIXED",
+            "iAccelFloor:-5": "MIXED",
+            "iAccelFloor:5": "MIXED",
+            "gRes:-5": "MIXED",
+            "gRes:5": "MIXED",
+            "lRes:-5": "MIXED",
+            "lRes:5": "MIXED",
+            "aWeak:-5": "MIXED",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "MIXED",
+            "gSlow:5": "MIXED",
+            "lSlow:-5": "MIXED",
+            "lSlow:5": "MIXED",
+            "pMax:-5": "MIXED",
+            "pMax:5": "MIXED",
+            "cBenign:-5": "MIXED",
+            "cBenign:5": "MIXED",
+            "qBenign:-5": "MIXED",
+            "qBenign:5": "MIXED",
+            "cVeto:-5": "MIXED",
+            "cVeto:5": "MIXED",
+            "qVeto:-5": "MIXED",
+            "qVeto:5": "MIXED",
+            "extreme:-5": "MIXED",
+            "extreme:5": "MIXED",
+            "lContract:-5": "MIXED",
+            "lContract:5": "MIXED",
+            "aSevere:-5": "MIXED",
+            "aSevere:5": "MIXED",
+            "weightedWeak:-5": "MIXED",
+            "weightedWeak:5": "MIXED",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        }
+      }
+    },
+    {
+      "id": "D",
+      "name": "Resilient growth / severe labor",
+      "inputs": {
+        "I": 75,
+        "G": 45,
+        "L": 70,
+        "P": 30,
+        "C": 25,
+        "Q": 25
+      },
+      "options": {
+        "A": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "activity_labor_divergence"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": true,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 32,
+          "total": 34,
+          "singleAgreement": 0.96875,
+          "coherentAgreement": 0.5,
+          "B": 50,
+          "robustness": "FRAGILE",
+          "cases": {
+            "iContained:-5": "MIXED",
+            "iContained:5": "MIXED",
+            "iHot:-5": "MIXED",
+            "iHot:5": "MIXED",
+            "iAccelFloor:-5": "MIXED",
+            "iAccelFloor:5": "MIXED",
+            "gRes:-5": "STAGFLATIONARY",
+            "gRes:5": "MIXED",
+            "lRes:-5": "MIXED",
+            "lRes:5": "MIXED",
+            "aWeak:-5": "MIXED",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "MIXED",
+            "gSlow:5": "MIXED",
+            "lSlow:-5": "MIXED",
+            "lSlow:5": "MIXED",
+            "pMax:-5": "MIXED",
+            "pMax:5": "MIXED",
+            "cBenign:-5": "MIXED",
+            "cBenign:5": "MIXED",
+            "qBenign:-5": "MIXED",
+            "qBenign:5": "MIXED",
+            "cVeto:-5": "MIXED",
+            "cVeto:5": "MIXED",
+            "qVeto:-5": "MIXED",
+            "qVeto:5": "MIXED",
+            "extreme:-5": "MIXED",
+            "extreme:5": "MIXED",
+            "lContract:-5": "MIXED",
+            "lContract:5": "MIXED",
+            "aSevere:-5": "MIXED",
+            "aSevere:5": "MIXED",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        },
+        "B": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "activity_labor_divergence"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": true,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 32,
+          "total": 34,
+          "singleAgreement": 0.96875,
+          "coherentAgreement": 0.5,
+          "B": 50,
+          "robustness": "FRAGILE",
+          "cases": {
+            "iContained:-5": "MIXED",
+            "iContained:5": "MIXED",
+            "iHot:-5": "MIXED",
+            "iHot:5": "MIXED",
+            "iAccelFloor:-5": "MIXED",
+            "iAccelFloor:5": "MIXED",
+            "gRes:-5": "STAGFLATIONARY",
+            "gRes:5": "MIXED",
+            "lRes:-5": "MIXED",
+            "lRes:5": "MIXED",
+            "aWeak:-5": "MIXED",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "MIXED",
+            "gSlow:5": "MIXED",
+            "lSlow:-5": "MIXED",
+            "lSlow:5": "MIXED",
+            "pMax:-5": "MIXED",
+            "pMax:5": "MIXED",
+            "cBenign:-5": "MIXED",
+            "cBenign:5": "MIXED",
+            "qBenign:-5": "MIXED",
+            "qBenign:5": "MIXED",
+            "cVeto:-5": "MIXED",
+            "cVeto:5": "MIXED",
+            "qVeto:-5": "MIXED",
+            "qVeto:5": "MIXED",
+            "extreme:-5": "MIXED",
+            "extreme:5": "MIXED",
+            "lContract:-5": "MIXED",
+            "lContract:5": "MIXED",
+            "aSevere:-5": "MIXED",
+            "aSevere:5": "MIXED",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        },
+        "C": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "activity_labor_divergence"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": true,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 35,
+          "total": 36,
+          "singleAgreement": 1,
+          "coherentAgreement": 0.5,
+          "B": 50,
+          "robustness": "FRAGILE",
+          "cases": {
+            "iContained:-5": "MIXED",
+            "iContained:5": "MIXED",
+            "iHot:-5": "MIXED",
+            "iHot:5": "MIXED",
+            "iAccelFloor:-5": "MIXED",
+            "iAccelFloor:5": "MIXED",
+            "gRes:-5": "MIXED",
+            "gRes:5": "MIXED",
+            "lRes:-5": "MIXED",
+            "lRes:5": "MIXED",
+            "aWeak:-5": "MIXED",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "MIXED",
+            "gSlow:5": "MIXED",
+            "lSlow:-5": "MIXED",
+            "lSlow:5": "MIXED",
+            "pMax:-5": "MIXED",
+            "pMax:5": "MIXED",
+            "cBenign:-5": "MIXED",
+            "cBenign:5": "MIXED",
+            "qBenign:-5": "MIXED",
+            "qBenign:5": "MIXED",
+            "cVeto:-5": "MIXED",
+            "cVeto:5": "MIXED",
+            "qVeto:-5": "MIXED",
+            "qVeto:5": "MIXED",
+            "extreme:-5": "MIXED",
+            "extreme:5": "MIXED",
+            "lContract:-5": "MIXED",
+            "lContract:5": "MIXED",
+            "aSevere:-5": "MIXED",
+            "aSevere:5": "MIXED",
+            "weightedWeak:-5": "MIXED",
+            "weightedWeak:5": "MIXED",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        }
+      }
+    },
+    {
+      "id": "E",
+      "name": "Hot inflation / severe joint weakness",
+      "inputs": {
+        "I": 85,
+        "G": 70,
+        "L": 65,
+        "P": 30,
+        "C": 25,
+        "Q": 25
+      },
+      "options": {
+        "A": {
+          "result": "STAGFLATIONARY",
+          "proved": [
+            "STAGFLATIONARY"
+          ],
+          "reasons": [],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": true,
+          "activitySeverity": "CONTRACTION_LEVEL",
+          "same": 34,
+          "total": 34,
+          "singleAgreement": 1,
+          "coherentAgreement": 1,
+          "B": 100,
+          "robustness": "ROBUST",
+          "cases": {
+            "iContained:-5": "STAGFLATIONARY",
+            "iContained:5": "STAGFLATIONARY",
+            "iHot:-5": "STAGFLATIONARY",
+            "iHot:5": "STAGFLATIONARY",
+            "iAccelFloor:-5": "STAGFLATIONARY",
+            "iAccelFloor:5": "STAGFLATIONARY",
+            "gRes:-5": "STAGFLATIONARY",
+            "gRes:5": "STAGFLATIONARY",
+            "lRes:-5": "STAGFLATIONARY",
+            "lRes:5": "STAGFLATIONARY",
+            "aWeak:-5": "STAGFLATIONARY",
+            "aWeak:5": "STAGFLATIONARY",
+            "gSlow:-5": "STAGFLATIONARY",
+            "gSlow:5": "STAGFLATIONARY",
+            "lSlow:-5": "STAGFLATIONARY",
+            "lSlow:5": "STAGFLATIONARY",
+            "pMax:-5": "STAGFLATIONARY",
+            "pMax:5": "STAGFLATIONARY",
+            "cBenign:-5": "STAGFLATIONARY",
+            "cBenign:5": "STAGFLATIONARY",
+            "qBenign:-5": "STAGFLATIONARY",
+            "qBenign:5": "STAGFLATIONARY",
+            "cVeto:-5": "STAGFLATIONARY",
+            "cVeto:5": "STAGFLATIONARY",
+            "qVeto:-5": "STAGFLATIONARY",
+            "qVeto:5": "STAGFLATIONARY",
+            "extreme:-5": "STAGFLATIONARY",
+            "extreme:5": "STAGFLATIONARY",
+            "lContract:-5": "STAGFLATIONARY",
+            "lContract:5": "STAGFLATIONARY",
+            "aSevere:-5": "STAGFLATIONARY",
+            "aSevere:5": "STAGFLATIONARY",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "STAGFLATIONARY"
+          },
+          "severityChanges": []
+        },
+        "B": {
+          "result": "STAGFLATIONARY",
+          "proved": [
+            "STAGFLATIONARY"
+          ],
+          "reasons": [],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": true,
+          "activitySeverity": "CONTRACTION_LEVEL",
+          "same": 34,
+          "total": 34,
+          "singleAgreement": 1,
+          "coherentAgreement": 1,
+          "B": 100,
+          "robustness": "ROBUST",
+          "cases": {
+            "iContained:-5": "STAGFLATIONARY",
+            "iContained:5": "STAGFLATIONARY",
+            "iHot:-5": "STAGFLATIONARY",
+            "iHot:5": "STAGFLATIONARY",
+            "iAccelFloor:-5": "STAGFLATIONARY",
+            "iAccelFloor:5": "STAGFLATIONARY",
+            "gRes:-5": "STAGFLATIONARY",
+            "gRes:5": "STAGFLATIONARY",
+            "lRes:-5": "STAGFLATIONARY",
+            "lRes:5": "STAGFLATIONARY",
+            "aWeak:-5": "STAGFLATIONARY",
+            "aWeak:5": "STAGFLATIONARY",
+            "gSlow:-5": "STAGFLATIONARY",
+            "gSlow:5": "STAGFLATIONARY",
+            "lSlow:-5": "STAGFLATIONARY",
+            "lSlow:5": "STAGFLATIONARY",
+            "pMax:-5": "STAGFLATIONARY",
+            "pMax:5": "STAGFLATIONARY",
+            "cBenign:-5": "STAGFLATIONARY",
+            "cBenign:5": "STAGFLATIONARY",
+            "qBenign:-5": "STAGFLATIONARY",
+            "qBenign:5": "STAGFLATIONARY",
+            "cVeto:-5": "STAGFLATIONARY",
+            "cVeto:5": "STAGFLATIONARY",
+            "qVeto:-5": "STAGFLATIONARY",
+            "qVeto:5": "STAGFLATIONARY",
+            "extreme:-5": "STAGFLATIONARY",
+            "extreme:5": "STAGFLATIONARY",
+            "lContract:-5": "STAGFLATIONARY",
+            "lContract:5": "STAGFLATIONARY",
+            "aSevere:-5": "STAGFLATIONARY",
+            "aSevere:5": "STAGFLATIONARY",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "STAGFLATIONARY"
+          },
+          "severityChanges": []
+        },
+        "C": {
+          "result": "STAGFLATIONARY",
+          "proved": [
+            "STAGFLATIONARY"
+          ],
+          "reasons": [],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": true,
+          "activitySeverity": "CONTRACTION_LEVEL",
+          "same": 36,
+          "total": 36,
+          "singleAgreement": 1,
+          "coherentAgreement": 1,
+          "B": 100,
+          "robustness": "ROBUST",
+          "cases": {
+            "iContained:-5": "STAGFLATIONARY",
+            "iContained:5": "STAGFLATIONARY",
+            "iHot:-5": "STAGFLATIONARY",
+            "iHot:5": "STAGFLATIONARY",
+            "iAccelFloor:-5": "STAGFLATIONARY",
+            "iAccelFloor:5": "STAGFLATIONARY",
+            "gRes:-5": "STAGFLATIONARY",
+            "gRes:5": "STAGFLATIONARY",
+            "lRes:-5": "STAGFLATIONARY",
+            "lRes:5": "STAGFLATIONARY",
+            "aWeak:-5": "STAGFLATIONARY",
+            "aWeak:5": "STAGFLATIONARY",
+            "gSlow:-5": "STAGFLATIONARY",
+            "gSlow:5": "STAGFLATIONARY",
+            "lSlow:-5": "STAGFLATIONARY",
+            "lSlow:5": "STAGFLATIONARY",
+            "pMax:-5": "STAGFLATIONARY",
+            "pMax:5": "STAGFLATIONARY",
+            "cBenign:-5": "STAGFLATIONARY",
+            "cBenign:5": "STAGFLATIONARY",
+            "qBenign:-5": "STAGFLATIONARY",
+            "qBenign:5": "STAGFLATIONARY",
+            "cVeto:-5": "STAGFLATIONARY",
+            "cVeto:5": "STAGFLATIONARY",
+            "qVeto:-5": "STAGFLATIONARY",
+            "qVeto:5": "STAGFLATIONARY",
+            "extreme:-5": "STAGFLATIONARY",
+            "extreme:5": "STAGFLATIONARY",
+            "lContract:-5": "STAGFLATIONARY",
+            "lContract:5": "STAGFLATIONARY",
+            "aSevere:-5": "STAGFLATIONARY",
+            "aSevere:5": "STAGFLATIONARY",
+            "weightedWeak:-5": "STAGFLATIONARY",
+            "weightedWeak:5": "STAGFLATIONARY",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "STAGFLATIONARY"
+          },
+          "severityChanges": []
+        }
+      }
+    },
+    {
+      "id": "F",
+      "name": "Hot inflation / intermediate activity",
+      "inputs": {
+        "I": 65,
+        "G": 52,
+        "L": 52,
+        "P": 30,
+        "C": 25,
+        "Q": 25
+      },
+      "options": {
+        "A": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "no_positive_envelope"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 32,
+          "total": 34,
+          "singleAgreement": 0.96875,
+          "coherentAgreement": 0.5,
+          "B": 50,
+          "robustness": "FRAGILE",
+          "cases": {
+            "iContained:-5": "MIXED",
+            "iContained:5": "MIXED",
+            "iHot:-5": "MIXED",
+            "iHot:5": "MIXED",
+            "iAccelFloor:-5": "MIXED",
+            "iAccelFloor:5": "MIXED",
+            "gRes:-5": "MIXED",
+            "gRes:5": "MIXED",
+            "lRes:-5": "MIXED",
+            "lRes:5": "MIXED",
+            "aWeak:-5": "STAGFLATIONARY",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "MIXED",
+            "gSlow:5": "MIXED",
+            "lSlow:-5": "MIXED",
+            "lSlow:5": "MIXED",
+            "pMax:-5": "MIXED",
+            "pMax:5": "MIXED",
+            "cBenign:-5": "MIXED",
+            "cBenign:5": "MIXED",
+            "qBenign:-5": "MIXED",
+            "qBenign:5": "MIXED",
+            "cVeto:-5": "MIXED",
+            "cVeto:5": "MIXED",
+            "qVeto:-5": "MIXED",
+            "qVeto:5": "MIXED",
+            "extreme:-5": "MIXED",
+            "extreme:5": "MIXED",
+            "lContract:-5": "MIXED",
+            "lContract:5": "MIXED",
+            "aSevere:-5": "MIXED",
+            "aSevere:5": "MIXED",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        },
+        "B": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "no_positive_envelope"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 32,
+          "total": 34,
+          "singleAgreement": 0.96875,
+          "coherentAgreement": 0.5,
+          "B": 50,
+          "robustness": "FRAGILE",
+          "cases": {
+            "iContained:-5": "MIXED",
+            "iContained:5": "MIXED",
+            "iHot:-5": "MIXED",
+            "iHot:5": "MIXED",
+            "iAccelFloor:-5": "MIXED",
+            "iAccelFloor:5": "MIXED",
+            "gRes:-5": "MIXED",
+            "gRes:5": "MIXED",
+            "lRes:-5": "MIXED",
+            "lRes:5": "MIXED",
+            "aWeak:-5": "STAGFLATIONARY",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "MIXED",
+            "gSlow:5": "MIXED",
+            "lSlow:-5": "MIXED",
+            "lSlow:5": "MIXED",
+            "pMax:-5": "MIXED",
+            "pMax:5": "MIXED",
+            "cBenign:-5": "MIXED",
+            "cBenign:5": "MIXED",
+            "qBenign:-5": "MIXED",
+            "qBenign:5": "MIXED",
+            "cVeto:-5": "MIXED",
+            "cVeto:5": "MIXED",
+            "qVeto:-5": "MIXED",
+            "qVeto:5": "MIXED",
+            "extreme:-5": "MIXED",
+            "extreme:5": "MIXED",
+            "lContract:-5": "MIXED",
+            "lContract:5": "MIXED",
+            "aSevere:-5": "MIXED",
+            "aSevere:5": "MIXED",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        },
+        "C": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "no_positive_envelope"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 36,
+          "total": 36,
+          "singleAgreement": 1,
+          "coherentAgreement": 1,
+          "B": 100,
+          "robustness": "ROBUST",
+          "cases": {
+            "iContained:-5": "MIXED",
+            "iContained:5": "MIXED",
+            "iHot:-5": "MIXED",
+            "iHot:5": "MIXED",
+            "iAccelFloor:-5": "MIXED",
+            "iAccelFloor:5": "MIXED",
+            "gRes:-5": "MIXED",
+            "gRes:5": "MIXED",
+            "lRes:-5": "MIXED",
+            "lRes:5": "MIXED",
+            "aWeak:-5": "MIXED",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "MIXED",
+            "gSlow:5": "MIXED",
+            "lSlow:-5": "MIXED",
+            "lSlow:5": "MIXED",
+            "pMax:-5": "MIXED",
+            "pMax:5": "MIXED",
+            "cBenign:-5": "MIXED",
+            "cBenign:5": "MIXED",
+            "qBenign:-5": "MIXED",
+            "qBenign:5": "MIXED",
+            "cVeto:-5": "MIXED",
+            "cVeto:5": "MIXED",
+            "qVeto:-5": "MIXED",
+            "qVeto:5": "MIXED",
+            "extreme:-5": "MIXED",
+            "extreme:5": "MIXED",
+            "lContract:-5": "MIXED",
+            "lContract:5": "MIXED",
+            "aSevere:-5": "MIXED",
+            "aSevere:5": "MIXED",
+            "weightedWeak:-5": "MIXED",
+            "weightedWeak:5": "MIXED",
+            "all:-5": "MIXED",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        }
+      }
+    },
+    {
+      "id": "G",
+      "name": "D repeated with divergence guard active",
+      "inputs": {
+        "I": 75,
+        "G": 45,
+        "L": 70,
+        "P": 30,
+        "C": 25,
+        "Q": 25
+      },
+      "options": {
+        "A": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "activity_labor_divergence"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": true,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 32,
+          "total": 34,
+          "singleAgreement": 0.96875,
+          "coherentAgreement": 0.5,
+          "B": 50,
+          "robustness": "FRAGILE",
+          "cases": {
+            "iContained:-5": "MIXED",
+            "iContained:5": "MIXED",
+            "iHot:-5": "MIXED",
+            "iHot:5": "MIXED",
+            "iAccelFloor:-5": "MIXED",
+            "iAccelFloor:5": "MIXED",
+            "gRes:-5": "STAGFLATIONARY",
+            "gRes:5": "MIXED",
+            "lRes:-5": "MIXED",
+            "lRes:5": "MIXED",
+            "aWeak:-5": "MIXED",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "MIXED",
+            "gSlow:5": "MIXED",
+            "lSlow:-5": "MIXED",
+            "lSlow:5": "MIXED",
+            "pMax:-5": "MIXED",
+            "pMax:5": "MIXED",
+            "cBenign:-5": "MIXED",
+            "cBenign:5": "MIXED",
+            "qBenign:-5": "MIXED",
+            "qBenign:5": "MIXED",
+            "cVeto:-5": "MIXED",
+            "cVeto:5": "MIXED",
+            "qVeto:-5": "MIXED",
+            "qVeto:5": "MIXED",
+            "extreme:-5": "MIXED",
+            "extreme:5": "MIXED",
+            "lContract:-5": "MIXED",
+            "lContract:5": "MIXED",
+            "aSevere:-5": "MIXED",
+            "aSevere:5": "MIXED",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        },
+        "B": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "activity_labor_divergence"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": true,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 32,
+          "total": 34,
+          "singleAgreement": 0.96875,
+          "coherentAgreement": 0.5,
+          "B": 50,
+          "robustness": "FRAGILE",
+          "cases": {
+            "iContained:-5": "MIXED",
+            "iContained:5": "MIXED",
+            "iHot:-5": "MIXED",
+            "iHot:5": "MIXED",
+            "iAccelFloor:-5": "MIXED",
+            "iAccelFloor:5": "MIXED",
+            "gRes:-5": "STAGFLATIONARY",
+            "gRes:5": "MIXED",
+            "lRes:-5": "MIXED",
+            "lRes:5": "MIXED",
+            "aWeak:-5": "MIXED",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "MIXED",
+            "gSlow:5": "MIXED",
+            "lSlow:-5": "MIXED",
+            "lSlow:5": "MIXED",
+            "pMax:-5": "MIXED",
+            "pMax:5": "MIXED",
+            "cBenign:-5": "MIXED",
+            "cBenign:5": "MIXED",
+            "qBenign:-5": "MIXED",
+            "qBenign:5": "MIXED",
+            "cVeto:-5": "MIXED",
+            "cVeto:5": "MIXED",
+            "qVeto:-5": "MIXED",
+            "qVeto:5": "MIXED",
+            "extreme:-5": "MIXED",
+            "extreme:5": "MIXED",
+            "lContract:-5": "MIXED",
+            "lContract:5": "MIXED",
+            "aSevere:-5": "MIXED",
+            "aSevere:5": "MIXED",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        },
+        "C": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "activity_labor_divergence"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": true,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL",
+          "same": 35,
+          "total": 36,
+          "singleAgreement": 1,
+          "coherentAgreement": 0.5,
+          "B": 50,
+          "robustness": "FRAGILE",
+          "cases": {
+            "iContained:-5": "MIXED",
+            "iContained:5": "MIXED",
+            "iHot:-5": "MIXED",
+            "iHot:5": "MIXED",
+            "iAccelFloor:-5": "MIXED",
+            "iAccelFloor:5": "MIXED",
+            "gRes:-5": "MIXED",
+            "gRes:5": "MIXED",
+            "lRes:-5": "MIXED",
+            "lRes:5": "MIXED",
+            "aWeak:-5": "MIXED",
+            "aWeak:5": "MIXED",
+            "gSlow:-5": "MIXED",
+            "gSlow:5": "MIXED",
+            "lSlow:-5": "MIXED",
+            "lSlow:5": "MIXED",
+            "pMax:-5": "MIXED",
+            "pMax:5": "MIXED",
+            "cBenign:-5": "MIXED",
+            "cBenign:5": "MIXED",
+            "qBenign:-5": "MIXED",
+            "qBenign:5": "MIXED",
+            "cVeto:-5": "MIXED",
+            "cVeto:5": "MIXED",
+            "qVeto:-5": "MIXED",
+            "qVeto:5": "MIXED",
+            "extreme:-5": "MIXED",
+            "extreme:5": "MIXED",
+            "lContract:-5": "MIXED",
+            "lContract:5": "MIXED",
+            "aSevere:-5": "MIXED",
+            "aSevere:5": "MIXED",
+            "weightedWeak:-5": "MIXED",
+            "weightedWeak:5": "MIXED",
+            "all:-5": "STAGFLATIONARY",
+            "all:5": "MIXED"
+          },
+          "severityChanges": []
+        }
+      }
+    }
+  ],
+  "review": {
+    "ruleOrder": {
+      "evaluations": 4680,
+      "discrepancies": 0,
+      "permutationsPerInput": 120
+    },
+    "grid": {
+      "inputs": {
+        "I": [
+          25,
+          45,
+          49,
+          50,
+          52,
+          59,
+          60,
+          65,
+          75,
+          85
+        ],
+        "G": [
+          0,
+          5,
+          10,
+          15,
+          20,
+          25,
+          30,
+          35,
+          40,
+          45,
+          50,
+          55,
+          60,
+          65,
+          70,
+          75,
+          80,
+          85,
+          90,
+          95,
+          100
+        ],
+        "L": [
+          0,
+          5,
+          10,
+          15,
+          20,
+          25,
+          30,
+          35,
+          40,
+          45,
+          50,
+          55,
+          60,
+          65,
+          70,
+          75,
+          80,
+          85,
+          90,
+          95,
+          100
+        ],
+        "pi": [
+          -1.2,
+          0,
+          0.3,
+          0.8
+        ]
+      },
+      "evaluations": 17640,
+      "overlaps": 0,
+      "hotSevereFailures": 0
+    },
+    "missingSupportingSweep": [
+      {
+        "C": 0,
+        "contained": "GOLDILOCKS",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 5,
+        "contained": "GOLDILOCKS",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 10,
+        "contained": "GOLDILOCKS",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 15,
+        "contained": "GOLDILOCKS",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 20,
+        "contained": "GOLDILOCKS",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 25,
+        "contained": "GOLDILOCKS",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 30,
+        "contained": "GOLDILOCKS",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 35,
+        "contained": "GOLDILOCKS",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 40,
+        "contained": "GOLDILOCKS",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 45,
+        "contained": "GOLDILOCKS",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 50,
+        "contained": "GOLDILOCKS",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 55,
+        "contained": "GOLDILOCKS",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 60,
+        "contained": "GOLDILOCKS",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 65,
+        "contained": "MIXED",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 70,
+        "contained": "MIXED",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 75,
+        "contained": "MIXED",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 80,
+        "contained": "MIXED",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 85,
+        "contained": "MIXED",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 90,
+        "contained": "MIXED",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 95,
+        "contained": "MIXED",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      },
+      {
+        "C": 100,
+        "contained": "MIXED",
+        "inflationary": "INFLATIONARY_EXPANSION"
+      }
+    ],
+    "missingAmbiguity": {
+      "assessmentStatus": "PROVISIONAL",
+      "currentRegime": null,
+      "regimeClarity": null,
+      "candidates": [
+        "GOLDILOCKS",
+        "MIXED"
+      ]
+    },
+    "missingContributionExample": {
+      "weights": [
+        0.4,
+        0.3,
+        0.3
+      ],
+      "before": [
+        90,
+        20,
+        20
+      ],
+      "beforeScore": 48,
+      "afterDisplay": 20,
+      "coverage": 0.6,
+      "bounds": [
+        12,
+        52
+      ],
+      "lowGate45": "unknown"
+    },
+    "nativeSensitivity": [
+      {
+        "name": "Contained resilient",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "GOLDILOCKS",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "GOLDILOCKS",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "GOLDILOCKS",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "GOLDILOCKS",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "GOLDILOCKS",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "GOLDILOCKS",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "GOLDILOCKS",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "GOLDILOCKS",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "Inflation before policy response",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "High but cooling inflation expansion",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "Stagflation with calm finance",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "Cooling stagflation",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "Severe weakness and low inflation",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "CONTRACTION_RECESSIONARY",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "CONTRACTION_RECESSIONARY",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "CONTRACTION_RECESSIONARY",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "CONTRACTION_RECESSIONARY",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "CONTRACTION_RECESSIONARY",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "CONTRACTION_RECESSIONARY",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "CONTRACTION_RECESSIONARY",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "CONTRACTION_RECESSIONARY",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "Disinflationary slowdown",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "DISINFLATIONARY_SLOWDOWN",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "DISINFLATIONARY_SLOWDOWN",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "DISINFLATIONARY_SLOWDOWN",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "DISINFLATIONARY_SLOWDOWN",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "DISINFLATIONARY_SLOWDOWN",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "DISINFLATIONARY_SLOWDOWN",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "DISINFLATIONARY_SLOWDOWN",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "DISINFLATIONARY_SLOWDOWN",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "High quality contradiction",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "MIXED",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "Restrictive policy",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "MIXED",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "Diluted policy score",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "MIXED",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "Fast real tightening",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "MIXED",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "Credit stress despite liquidity",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "MIXED",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "Boundary Goldilocks",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "GOLDILOCKS",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "GOLDILOCKS",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "GOLDILOCKS",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "GOLDILOCKS",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "GOLDILOCKS",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "GOLDILOCKS",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "GOLDILOCKS",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "GOLDILOCKS",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "Inflation floor acceleration",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "INFLATIONARY_EXPANSION",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "Reflation below stress floor",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "MIXED",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "MIXED fragile near resilient activity envelope",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "MIXED",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "MIXED",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "Severe one-sided growth weakness, no divergence",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          }
+        ]
+      },
+      {
+        "name": "Severe one-sided labor weakness, no divergence",
+        "cases": [
+          {
+            "id": "realMax:1.25",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "realMax:1.75",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.25",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "realChangeMax:.75",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.25",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "targetChangeMax:.75",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.2",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          },
+          {
+            "id": "piAcceleration:.4",
+            "result": "STAGFLATIONARY",
+            "changed": false
+          }
+        ]
+      }
+    ],
+    "supportSlopes": [
+      {
+        "name": "High quality contradiction",
+        "cases": [
+          {
+            "slope": 1.5,
+            "support": {
+              "GOLDILOCKS": 55.5,
+              "INFLATIONARY_EXPANSION": 56.25,
+              "STAGFLATIONARY": 75,
+              "CONTRACTION_RECESSIONARY": 37.5,
+              "DISINFLATIONARY_SLOWDOWN": 48.75
+            },
+            "mixedSupports": {
+              "activity_labor_divergence": 89
+            },
+            "selectedSupportReason": "activity_labor_divergence",
+            "W": 89,
+            "B": 100,
+            "X": 0,
+            "tensions": [
+              {
+                "code": "activity_labor_divergence",
+                "severity": 70,
+                "defining": true
+              }
+            ],
+            "clarityRaw": 95.05000000000001,
+            "regimeClarity": 95,
+            "cap": 100
+          },
+          {
+            "slope": 2,
+            "support": {
+              "GOLDILOCKS": 54,
+              "INFLATIONARY_EXPANSION": 55,
+              "STAGFLATIONARY": 80,
+              "CONTRACTION_RECESSIONARY": 40,
+              "DISINFLATIONARY_SLOWDOWN": 45
+            },
+            "mixedSupports": {
+              "activity_labor_divergence": 96
+            },
+            "selectedSupportReason": "activity_labor_divergence",
+            "W": 96,
+            "B": 100,
+            "X": 0,
+            "tensions": [
+              {
+                "code": "activity_labor_divergence",
+                "severity": 70,
+                "defining": true
+              }
+            ],
+            "clarityRaw": 98.2,
+            "regimeClarity": 98,
+            "cap": 100
+          },
+          {
+            "slope": 2.5,
+            "support": {
+              "GOLDILOCKS": 54.25,
+              "INFLATIONARY_EXPANSION": 53.75,
+              "STAGFLATIONARY": 85,
+              "CONTRACTION_RECESSIONARY": 42.5,
+              "DISINFLATIONARY_SLOWDOWN": 48.75
+            },
+            "mixedSupports": {
+              "activity_labor_divergence": 99
+            },
+            "selectedSupportReason": "activity_labor_divergence",
+            "W": 99,
+            "B": 100,
+            "X": 0,
+            "tensions": [
+              {
+                "code": "activity_labor_divergence",
+                "severity": 70,
+                "defining": true
+              }
+            ],
+            "clarityRaw": 99.55000000000001,
+            "regimeClarity": 100,
+            "cap": 100
+          }
+        ]
+      },
+      {
+        "name": "MIXED fragile near resilient activity envelope",
+        "cases": [
+          {
+            "slope": 1.5,
+            "support": {
+              "GOLDILOCKS": 61.65,
+              "INFLATIONARY_EXPANSION": 68.25,
+              "STAGFLATIONARY": 66.75,
+              "CONTRACTION_RECESSIONARY": 43.5,
+              "DISINFLATIONARY_SLOWDOWN": 40.5
+            },
+            "mixedSupports": {
+              "no_positive_envelope": 50
+            },
+            "selectedSupportReason": "no_positive_envelope",
+            "W": 50,
+            "B": 50,
+            "X": 0,
+            "tensions": [],
+            "clarityRaw": 60,
+            "regimeClarity": 49,
+            "cap": 49
+          },
+          {
+            "slope": 2,
+            "support": {
+              "GOLDILOCKS": 57.7,
+              "INFLATIONARY_EXPANSION": 71,
+              "STAGFLATIONARY": 69,
+              "CONTRACTION_RECESSIONARY": 38,
+              "DISINFLATIONARY_SLOWDOWN": 34
+            },
+            "mixedSupports": {
+              "no_positive_envelope": 50
+            },
+            "selectedSupportReason": "no_positive_envelope",
+            "W": 50,
+            "B": 50,
+            "X": 0,
+            "tensions": [],
+            "clarityRaw": 60,
+            "regimeClarity": 49,
+            "cap": 49
+          },
+          {
+            "slope": 2.5,
+            "support": {
+              "GOLDILOCKS": 56.875,
+              "INFLATIONARY_EXPANSION": 73.75,
+              "STAGFLATIONARY": 71.25,
+              "CONTRACTION_RECESSIONARY": 32.5,
+              "DISINFLATIONARY_SLOWDOWN": 35
+            },
+            "mixedSupports": {
+              "no_positive_envelope": 50
+            },
+            "selectedSupportReason": "no_positive_envelope",
+            "W": 50,
+            "B": 50,
+            "X": 0,
+            "tensions": [],
+            "clarityRaw": 60,
+            "regimeClarity": 49,
+            "cap": 49
+          }
+        ]
+      }
+    ],
+    "residualTension": {
+      "input": {
+        "I": 75,
+        "G": 25,
+        "L": 70,
+        "P": 50,
+        "C": 40,
+        "Q": 40,
+        "pi": 0.8,
+        "yoyChange": -0.4
+      },
+      "support": {
+        "GOLDILOCKS": 54,
+        "INFLATIONARY_EXPANSION": 55,
+        "STAGFLATIONARY": 80,
+        "CONTRACTION_RECESSIONARY": 40,
+        "DISINFLATIONARY_SLOWDOWN": 45
+      },
+      "mixedSupports": {
+        "activity_labor_divergence": 96
+      },
+      "selectedSupportReason": "activity_labor_divergence",
+      "W": 96,
+      "B": 100,
+      "X": 40,
+      "tensions": [
+        {
+          "code": "activity_labor_divergence",
+          "severity": 70,
+          "defining": true
+        },
+        {
+          "code": "inflation_pace_divergence",
+          "severity": 40,
+          "defining": false
+        }
+      ],
+      "clarityRaw": 90.2,
+      "regimeClarity": 90,
+      "cap": 100
+    },
+    "qualityRemoval": {
+      "weights": [
+        0.2,
+        0.15,
+        0.25,
+        0.1,
+        0.18,
+        0.12
+      ],
+      "qualities": [
+        0.91,
+        0.8,
+        0.95,
+        0.88,
+        0.75,
+        1
+      ],
+      "masks": 64,
+      "directedEdges": 192,
+      "increases": 0
+    },
+    "assertions": {
+      "robustMixedHighClarity": true,
+      "fragileMixedLowClarity": true,
+      "missingAmbiguityNotMixed": true,
+      "causalRename": true,
+      "inflationaryCalmFinance": true,
+      "mildOneSidedNotStag": true,
+      "severeOneSidedHandled": true,
+      "divergenceIsMixed": true,
+      "noGridOverlap": true,
+      "hotSevereQualifier": true,
+      "noPermutationDiscrepancies": true,
+      "qualityRemovalMonotone": true,
+      "residualTensionStillPenalized": true
+    },
+    "limits": [
+      "Synthetic in-memory worksheet, not application tests",
+      "Only the disclosed grid/completions, not a full dependency solver",
+      "Full current/revised-history diagnostic unavailable; not run",
+      "No point-in-time, predictive, source or deployment validation rerun"
+    ]
+  },
+  "edgeComparisons": [
+    {
+      "name": "Severe growth, other not clearly resilient",
+      "input": {
+        "I": 75,
+        "G": 70,
+        "L": 46,
+        "P": 30,
+        "C": 25,
+        "Q": 25
+      },
+      "results": {
+        "A": {
+          "result": "STAGFLATIONARY",
+          "proved": [
+            "STAGFLATIONARY"
+          ],
+          "reasons": [],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL"
+        },
+        "B": {
+          "result": "STAGFLATIONARY",
+          "proved": [
+            "STAGFLATIONARY"
+          ],
+          "reasons": [],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL"
+        },
+        "C": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "no_positive_envelope"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL"
+        }
+      }
+    },
+    {
+      "name": "Severe labor, other not clearly resilient",
+      "input": {
+        "I": 75,
+        "G": 46,
+        "L": 70,
+        "P": 30,
+        "C": 25,
+        "Q": 25
+      },
+      "results": {
+        "A": {
+          "result": "STAGFLATIONARY",
+          "proved": [
+            "STAGFLATIONARY"
+          ],
+          "reasons": [],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL"
+        },
+        "B": {
+          "result": "STAGFLATIONARY",
+          "proved": [
+            "STAGFLATIONARY"
+          ],
+          "reasons": [],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL"
+        },
+        "C": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "no_positive_envelope"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL"
+        }
+      }
+    },
+    {
+      "name": "Equal-weight threshold55 comparison only",
+      "input": {
+        "I": 75,
+        "G": 56,
+        "L": 56,
+        "P": 30,
+        "C": 25,
+        "Q": 25
+      },
+      "threshold": 55,
+      "results": {
+        "A": {
+          "result": "STAGFLATIONARY",
+          "proved": [
+            "STAGFLATIONARY"
+          ],
+          "reasons": [],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL"
+        },
+        "B": {
+          "result": "STAGFLATIONARY",
+          "proved": [
+            "STAGFLATIONARY"
+          ],
+          "reasons": [],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL"
+        },
+        "C": {
+          "result": "STAGFLATIONARY",
+          "proved": [
+            "STAGFLATIONARY"
+          ],
+          "reasons": [],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL"
+        }
+      }
+    },
+    {
+      "name": "Weighted55 admits sub-severe one-sided weakness",
+      "input": {
+        "I": 75,
+        "G": 62,
+        "L": 48,
+        "P": 30,
+        "C": 25,
+        "Q": 25
+      },
+      "threshold": 55,
+      "results": {
+        "A": {
+          "result": "STAGFLATIONARY",
+          "proved": [
+            "STAGFLATIONARY"
+          ],
+          "reasons": [],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL"
+        },
+        "B": {
+          "result": "MIXED",
+          "proved": [],
+          "reasons": [
+            "no_positive_envelope"
+          ],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL"
+        },
+        "C": {
+          "result": "STAGFLATIONARY",
+          "proved": [
+            "STAGFLATIONARY"
+          ],
+          "reasons": [],
+          "hot": true,
+          "resilient": false,
+          "divergent": false,
+          "severe": false,
+          "activitySeverity": "NOT_CONTRACTION_LEVEL"
+        }
+      }
+    }
+  ],
+  "independentArithmeticChecks": {
+    "robustMixedSupport": 96,
+    "robustMixedClarity": 98,
+    "fragileMixedClarity": 49,
+    "syntheticQuality": 91,
+    "configurationDefectClarity": 35
+  }
+}

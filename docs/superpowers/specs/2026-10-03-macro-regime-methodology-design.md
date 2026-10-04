@@ -2,7 +2,7 @@
 
 ## Status
 
-Superseded by [Macro Regime Methodology and Data Architecture Design - Revised](2026-10-03-macro-regime-methodology-revised.md), version `US-MACRO-0.2-review`. Retained as the original design/review record; do not implement its old rules. The revised document preserves the server-only provider architecture, provenance, public-source constraint and Netlify target while replacing the methodology choices below.
+Superseded by [Revised v0.3](2026-10-04-macro-regime-methodology-v0.3.md), version `US-MACRO-0.3-review`, together with its approved v0.2 baseline. Retained as the original design/review record; do not implement its old rules. The revised specification preserves the server-only provider architecture, provenance, public-source constraint and Netlify target while replacing the methodology choices below.
 
 ## Goal
 

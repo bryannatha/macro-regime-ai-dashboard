@@ -4,8 +4,9 @@ import type {
   ObservationKey,
   ObservationMap,
 } from "@/lib/types";
-import { getPlaybook } from "@/lib/playbook";
-import { calculateScores, classifyRegime } from "@/lib/scoring";
+import { getResearchImplications } from "@/lib/playbook";
+import { evaluateRegime } from "@/lib/regime";
+import { calculateScores } from "@/lib/scoring";
 import { createUnavailableObservation } from "./parsers";
 import type { AdapterOptions } from "./types";
 import { fetchBlsCpi } from "./providers/bls";
@@ -15,6 +16,7 @@ import { fetchFedBroadDollar } from "./providers/fed";
 import { fetchFrankfurterUsdIdr } from "./providers/frankfurter";
 import { fetchMempoolDemand } from "./providers/mempool";
 import { fetchTreasuryYields } from "./providers/treasury";
+import { createUnconfiguredRegimeInputs } from "./regime-inputs";
 
 export interface DashboardOptions extends AdapterOptions {
   eiaApiKey?: string;
@@ -189,7 +191,8 @@ export async function getDashboardPayload(options: DashboardOptions = {}): Promi
     observation.status === "available" && observation.observedAt ? [observation.observedAt] : [],
   );
   const scores = calculateScores(observations);
-  const regime = classifyRegime(observations, scores);
+  // Current public feeds are monitoring proxies, not the registered two-family core-factor inputs.
+  const regime = evaluateRegime(createUnconfiguredRegimeInputs());
 
   return {
     generatedAt,
@@ -197,6 +200,6 @@ export async function getDashboardPayload(options: DashboardOptions = {}): Promi
     observations,
     scores,
     regime,
-    playbook: regime ? getPlaybook(regime.regime) : null,
+    researchImplications: regime.regime ? getResearchImplications(regime.regime) : null,
   };
 }

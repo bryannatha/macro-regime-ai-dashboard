@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DashboardPayload, MetricObservation, ObservationKey } from "@/lib/types";
+import { evaluateRegime } from "@/lib/regime";
+import { createUnconfiguredRegimeInputs } from "@/lib/market-data/regime-inputs";
 
 vi.mock("@/lib/market-data", () => ({ getDashboardPayload: vi.fn() }));
 
@@ -40,8 +42,8 @@ const payload: DashboardPayload = {
   dataAsOf: "2026-10-02",
   observations: Object.fromEntries(observationKeys.map((key) => [key, observation(key)])) as DashboardPayload["observations"],
   scores: [],
-  regime: null,
-  playbook: null,
+  regime: evaluateRegime(createUnconfiguredRegimeInputs()),
+  researchImplications: null,
 };
 
 describe("GET /api/market-data", () => {
@@ -57,6 +59,13 @@ describe("GET /api/market-data", () => {
     expect(body.observations.usdidr.label).toBe("USD / IDR (ECB cross)");
     expect(body.observations.oil).toMatchObject({ status: "unavailable", value: null });
     expect(body.observations.btcPrice).toMatchObject({ status: "excluded", value: null });
+    expect(body.regime).toMatchObject({
+      assessmentStatus: "INSUFFICIENT_DATA",
+      regime: null,
+      dataQuality: 0,
+      regimeClarity: null,
+    });
+    expect(body.researchImplications).toBeNull();
     expect(JSON.stringify(body)).not.toContain("api_key");
     expect(JSON.stringify(body)).not.toContain("synthetic");
   });
