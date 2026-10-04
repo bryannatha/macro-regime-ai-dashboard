@@ -42,7 +42,8 @@ describe("getDashboardPayload", () => {
 
     expect(payload.generatedAt).toBe(generatedAt);
     expect(payload.dataAsOf).toBe("2026-10-03");
-    expect(Object.values(payload.observations).filter((item) => item.status === "available")).toHaveLength(10);
+    expect(Object.values(payload.observations).filter((item) => item.status === "available")).toHaveLength(9);
+    expect(payload.observations.tenYearRealYield).toMatchObject({ status: "unavailable", value: null });
     expect(Object.values(payload.observations).every((item) => item.fetchedAt === generatedAt)).toBe(true);
     expect(Object.values(payload.observations).filter((item) => item.status === "excluded").map((item) => item.key).sort())
       .toEqual([...excludedKeys].sort());
@@ -73,7 +74,7 @@ describe("getDashboardPayload", () => {
     });
 
     expect(payload.observations.twoYearYield).toMatchObject({ status: "unavailable", value: null });
-    expect(payload.observations.tenYearRealYield.status).toBe("available");
+    expect(payload.observations.tenYearRealYield).toMatchObject({ status: "unavailable", value: null });
     expect(payload.observations.cpi.status).toBe("available");
   });
 

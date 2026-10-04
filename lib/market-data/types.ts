@@ -1,4 +1,9 @@
-import type { QualitySlotInput, SourceState } from "@/lib/types";
+import type {
+  QualitySlotInput,
+  SourceHistoryStatus,
+  SourceParserStatus,
+  SourceState,
+} from "@/lib/types";
 
 export type { SourceRegistryEntry, SourceState } from "@/lib/types";
 
@@ -35,6 +40,17 @@ export interface CoreSourceObservation {
   releaseDateQuality: number;
   version: string | null;
   vintage: string | null;
+}
+
+export interface CoreObservationSeriesResult {
+  sourceId: string;
+  identifier: string;
+  state: SourceState;
+  observations: CoreSourceObservation[];
+  parserStatus: SourceParserStatus;
+  historyStatus: SourceHistoryStatus;
+  retrievedAt: string | null;
+  reason: string | null;
 }
 
 export interface ValidatedObservationCacheEntry {

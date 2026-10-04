@@ -1,6 +1,11 @@
 import type { MetricObservation } from "@/lib/types";
 import { createAvailableObservation, observationFailure, parseFiniteNumber, parseIsoDate, parseXml } from "@/lib/market-data/parsers";
-import { cachedFetchOptions, fetchedAtFrom, type AdapterOptions } from "@/lib/market-data/types";
+import {
+  cachedFetchOptions,
+  fetchedAtFrom,
+  type AdapterOptions,
+  type CoreObservationSeriesResult,
+} from "@/lib/market-data/types";
 
 const source = "U.S. Department of the Treasury";
 const sourceUrl = "https://home.treasury.gov/treasury-daily-interest-rate-xml-feed";
@@ -56,9 +61,19 @@ function parseYield(
 }
 
 export function parseTreasuryYields(nominalXml: string, realXml: string, fetchedAt: string): YieldResult {
+  void realXml;
   return {
     twoYearYield: parseYield(nominalXml, "BC_2YEAR", "twoYearYield", "U.S. 2-year Treasury yield", fetchedAt),
-    tenYearRealYield: parseYield(realXml, "TC_10YEAR", "tenYearRealYield", "U.S. 10-year real Treasury yield", fetchedAt),
+    tenYearRealYield: observationFailure(
+      "tenYearRealYield",
+      "U.S. 10-year real Treasury yield",
+      "%",
+      source,
+      sourceUrl,
+      fetchedAt,
+      "Daily",
+      "Treasury real-yield data are withheld until source-specific reuse/display terms are cleared.",
+    ),
   };
 }
 
@@ -74,17 +89,30 @@ export async function fetchTreasuryYields(options: AdapterOptions = {}): Promise
     return url;
   };
 
-  const load = async (data: string): Promise<string> => {
-    const response = await fetchImpl(makeUrl(data), cachedFetchOptions(3600));
-    if (!response.ok) throw new Error("Treasury request failed");
-    return response.text();
-  };
+  let nominalResult = "<feed />";
+  try {
+    const response = await fetchImpl(makeUrl("daily_treasury_yield_curve"), cachedFetchOptions(3600));
+    if (response.ok) nominalResult = await response.text();
+  } catch {
+    nominalResult = "<feed />";
+  }
+  return parseTreasuryYields(nominalResult, "", fetchedAt);
+}
 
-  const [nominal, real] = await Promise.allSettled([
-    load("daily_treasury_yield_curve"),
-    load("daily_treasury_real_yield_curve"),
-  ]);
-  const nominalResult = nominal.status === "fulfilled" ? nominal.value : "<feed />";
-  const realResult = real.status === "fulfilled" ? real.value : "<feed />";
-  return parseTreasuryYields(nominalResult, realResult, fetchedAt);
+export function parseTreasuryRealYieldCore(
+  _xml: string,
+  _retrievedAt: string,
+): CoreObservationSeriesResult {
+  void _xml;
+  void _retrievedAt;
+  return {
+    sourceId: "treasury-real-yield",
+    identifier: "TC_10YEAR",
+    state: "REDISTRIBUTION_BLOCKED",
+    observations: [],
+    parserStatus: "PARTIAL",
+    historyStatus: "PARTIAL",
+    retrievedAt: null,
+    reason: "Treasury daily real-yield reuse/display terms have not been cleared for this source.",
+  };
 }

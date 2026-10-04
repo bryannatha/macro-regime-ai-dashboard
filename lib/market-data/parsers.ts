@@ -13,6 +13,15 @@ const xmlParser = new XMLParser({
   removeNSPrefix: true,
 });
 
+const xmlParserWithAttributes = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "@_",
+  isArray: (name) => name === "entry" || name === "week",
+  parseAttributeValue: false,
+  parseTagValue: false,
+  removeNSPrefix: true,
+});
+
 export function parseFiniteNumber(input: unknown): number | null {
   if (typeof input === "number") return Number.isFinite(input) ? input : null;
   if (typeof input !== "string") return null;
@@ -40,6 +49,10 @@ export function parseUsDate(input: unknown): string | null {
 
 export function parseXml(input: string): Record<string, unknown> {
   return xmlParser.parse(input) as Record<string, unknown>;
+}
+
+export function parseXmlWithAttributes(input: string): Record<string, unknown> {
+  return xmlParserWithAttributes.parse(input) as Record<string, unknown>;
 }
 
 export function createUnavailableObservation(
