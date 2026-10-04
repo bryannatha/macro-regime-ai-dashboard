@@ -76,7 +76,7 @@
 
 **Files:** All task-scoped edits above; preserve the approved v0.3 specification and evidence files.
 
-- [ ] Run `npm test`, `npm run lint`, `npx tsc --noEmit`, and `npm run build`; fix failures within task scope.
-- [ ] Review the full Git diff for secrets, stale enums, mock feeds, data-source leakage, and unrelated changes.
-- [ ] Commit the task and push `main` to the user-specified origin.
-- [ ] Verify the connected Netlify deployment and both API routes; report any source-dependent limitations explicitly.
+- [x] Run `npm test` (58 tests), `npm run lint` (zero warnings), `npx tsc --noEmit`, and `npm run build` (successful; elevated permissions were needed for SWC to canonicalize the Windows workspace path).
+- [x] Review the full Git diff for secrets, stale enums, mock feeds, data-source leakage, and unrelated changes.
+- [x] Commit the task and push `main` to the user-specified origin (`d54ffaa`, plus the two previously-ahead methodology commits).
+- [x] Verify the connected Netlify deployment and both API routes; the live site shows the v0.3 dashboard/methodology and API responses with `INSUFFICIENT_DATA`, no regime, Data Quality 0, null Clarity/Research Implications, and all six factors not yet source-mapped.
