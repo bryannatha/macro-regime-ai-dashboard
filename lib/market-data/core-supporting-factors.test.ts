@@ -8,6 +8,7 @@ import {
   parseFederalReserveH8Loans,
   parseFederalReserveSloosChartData,
   fetchFederalReserveH8Loans,
+  fetchFederalReserveSloos,
 } from "./providers/federal-reserve-core";
 import {
   transformCreditStandards,
@@ -118,6 +119,9 @@ const sloosHtml = `<h3>Figure 1: Measures of Supply and Demand for C&amp;I Loans
 <tr><td>2026:3</td><td>20.0</td><td>30.0</td><td>0</td><td>0</td></tr>
 </tbody></table>`;
 
+const sloosIndexHtml = `<a href="/data/sloos/sloos-202607.htm">July 2026</a><a href="/data/sloos/sloos-202604.htm">April 2026</a>`;
+const sloosReleaseHtml = `<a href="sloos-202607-chart-data.htm">Chart data</a>`;
+
 describe("approved supporting source parsers", () => {
   it("keeps H.4.1 Wednesday total assets separate from weekly-average factors", () => {
     const html = `<h2>H.4.1</h2><h3>1. Factors Affecting Reserve Balances</h3>
@@ -158,6 +162,21 @@ describe("approved supporting source parsers", () => {
     expect(parsed.observations.at(-1)).toMatchObject({ value: 22_500, unit: "billions USD", seasonalBasis: "SA", observedAt: "2026-08-01" });
   });
 
+  it("parses the Board compact-SDMX H.6 archive layout", () => {
+    const observations = ["2026-03", "2026-04", "2026-05", "2026-06", "2026-07", "2026-08"]
+      .map((period, index) => `<frb:Obs OBS_STATUS="A" OBS_VALUE="${22_000 + index * 100}" TIME_PERIOD="${period}" />`)
+      .join("");
+    const xml = `<message:MessageGroup xmlns:message="urn:message" xmlns:kf="urn:h6" xmlns:frb="urn:frb">
+      <message:DataSet id="H6_M2"><kf:Series ADJUSTED="SA" CURRENCY="USD" FREQ="129" SERIES_NAME="M2.M" UNIT="Currency" UNIT_MULT="1e+09">${observations}</kf:Series></message:DataSet>
+    </message:MessageGroup>`;
+
+    const parsed = parseFederalReserveH6M2Xml(xml, retrievedAt);
+
+    expect(parsed).toMatchObject({ sourceId: monthlySource, identifier: "M2.M", state: "AVAILABLE", parserStatus: "VERIFIED" });
+    expect(parsed.observations).toHaveLength(6);
+    expect(parsed.observations.at(-1)).toMatchObject({ value: 22_500, unit: "billions USD", seasonalBasis: "SA", observedAt: "2026-08-01" });
+  });
+
   it("parses SLOOS standards into distinct large/middle-market and small-business slots", () => {
     const parsed = parseFederalReserveSloosChartData(sloosHtml, retrievedAt);
     expect(parsed.map(({ identifier, state }) => ({ identifier, state }))).toEqual([
@@ -166,6 +185,28 @@ describe("approved supporting source parsers", () => {
     ]);
     expect(parsed[0].observations.at(-1)).toMatchObject({ value: 20, unit: "percent net", seasonalBasis: "Not seasonally adjusted", observedAt: "2026-07-01" });
     expect(parsed[1].observations.at(-1)?.value).toBe(30);
+  });
+
+  it("discovers the chart-data page through the latest SLOOS release page", async () => {
+    const requests: string[] = [];
+    const result = await fetchFederalReserveSloos({
+      now: new Date(retrievedAt),
+      fetchImpl: async (input) => {
+        const url = String(input);
+        requests.push(url);
+        if (url === "https://www.federalreserve.gov/data/sloos.htm") return new Response(sloosIndexHtml, { status: 200 });
+        if (url === "https://www.federalreserve.gov/data/sloos/sloos-202607.htm") return new Response(sloosReleaseHtml, { status: 200 });
+        if (url === "https://www.federalreserve.gov/data/sloos/sloos-202607-chart-data.htm") return new Response(sloosHtml, { status: 200 });
+        return new Response("not found", { status: 404 });
+      },
+    });
+
+    expect(requests).toEqual([
+      "https://www.federalreserve.gov/data/sloos.htm",
+      "https://www.federalreserve.gov/data/sloos/sloos-202607.htm",
+      "https://www.federalreserve.gov/data/sloos/sloos-202607-chart-data.htm",
+    ]);
+    expect(result.map(({ state }) => state)).toEqual(["AVAILABLE", "AVAILABLE"]);
   });
 
   it("does not treat a four-week H.8 page as sufficient for a 17-week volume transform", () => {
@@ -228,6 +269,26 @@ describe("approved supporting source parsers", () => {
       { state: "AVAILABLE", count: 4 },
     ]);
     expect(parseFederalReserveCreditPerformanceXml("<html>not an SDMX release</html>", retrievedAt).every(({ state }) => state === "FAILED")).toBe(true);
+  });
+
+  it("parses compact-SDMX quarterly credit series with quarter-end observation dates", () => {
+    const observations = [
+      ["2025-09-30", 2], ["2025-12-31", 2.5], ["2026-03-31", 3], ["2026-06-30", 3.5],
+    ].map(([period, value]) => `<frb:Obs OBS_STATUS="A" OBS_VALUE="${value}" TIME_PERIOD="${period}" />`).join("");
+    const xml = `<message:MessageGroup xmlns:message="urn:message" xmlns:kf="urn:chgdel" xmlns:frb="urn:frb">
+      <message:DataSet id="CHGDEL">
+        <kf:Series CHGDEL="DEL" COMPONENT="RATIO" FREQ="162" LOANTYPE="TOTAL" SA="SA" SERIES_NAME="STFBQD%STFBAIL_XEOP_MA.Q" SIZE="ALL" UNIT="Percentage" UNIT_MULT="1">${observations}</kf:Series>
+        <kf:Series CHGDEL="CHG" COMPONENT="RATIO" FREQ="162" LOANTYPE="TOTAL" SA="SA" SERIES_NAME="STFBQC%STFBAIL_MA.Q" SIZE="ALL" UNIT="Percentage" UNIT_MULT="1">${observations}</kf:Series>
+      </message:DataSet>
+    </message:MessageGroup>`;
+
+    const parsed = parseFederalReserveCreditPerformanceXml(xml, retrievedAt);
+
+    expect(parsed.map(({ state, observations: points }) => ({ state, count: points.length }))).toEqual([
+      { state: "AVAILABLE", count: 4 },
+      { state: "AVAILABLE", count: 4 },
+    ]);
+    expect(parsed[0].observations.at(-1)).toMatchObject({ value: 3.5, unit: "percent", seasonalBasis: "SA", observedAt: "2026-04-01" });
   });
 });
 

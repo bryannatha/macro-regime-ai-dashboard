@@ -228,8 +228,16 @@ function attribute(value: unknown): string | null {
 }
 
 function seriesDimensions(series: XmlRecord): Map<string, string> {
-  const key = record(series.SeriesKey);
   const dimensions = new Map<string, string>();
+  for (const [key, rawValue] of Object.entries(series)) {
+    if (!key.startsWith("@_")) continue;
+    const id = key.slice(2);
+    const value = attribute(rawValue);
+    if (!value) continue;
+    dimensions.set(id, value);
+    if (id === "SA") dimensions.set("ADJUSTED", value);
+  }
+  const key = record(series.SeriesKey);
   for (const raw of asArray(key?.Value)) {
     const item = record(raw);
     const id = attribute(item?.["@_id"]);
@@ -242,10 +250,19 @@ function seriesDimensions(series: XmlRecord): Map<string, string> {
 function periodDate(input: string, cadence: "monthly" | "quarterly"): string | null {
   if (cadence === "monthly") {
     const match = /^(\d{4})M(0[1-9]|1[0-2])$/.exec(input);
-    return match ? `${match[1]}-${match[2]}-01` : null;
+    if (match) return `${match[1]}-${match[2]}-01`;
+    const monthPeriod = /^(\d{4})-(0[1-9]|1[0-2])(?:-\d{2})?$/.exec(input);
+    return monthPeriod ? `${monthPeriod[1]}-${monthPeriod[2]}-01` : null;
   }
   const match = /^(\d{4})Q([1-4])$/.exec(input);
-  return match ? `${match[1]}-${String((Number(match[2]) - 1) * 3 + 1).padStart(2, "0")}-01` : null;
+  if (match) return `${match[1]}-${String((Number(match[2]) - 1) * 3 + 1).padStart(2, "0")}-01`;
+  const quarterEnd = parseIsoDate(input);
+  if (!quarterEnd) return null;
+  const year = Number(quarterEnd.slice(0, 4));
+  const month = Number(quarterEnd.slice(5, 7));
+  const day = Number(quarterEnd.slice(8, 10));
+  if (![3, 6, 9, 12].includes(month) || new Date(Date.UTC(year, month, 0)).getUTCDate() !== day) return null;
+  return `${year}-${String(month - 2).padStart(2, "0")}-01`;
 }
 
 function orderedObservations(input: unknown, cadence: "monthly" | "quarterly"): Array<{ date: string; value: number }> | null {
@@ -253,8 +270,9 @@ function orderedObservations(input: unknown, cadence: "monthly" | "quarterly"): 
     const item = record(raw);
     const dimension = record(item?.ObsDimension);
     const value = record(item?.ObsValue);
-    const date = periodDate(attribute(dimension?.["@_value"]) ?? "", cadence);
-    const numeric = parseFiniteNumber(attribute(value?.["@_value"]));
+    const period = attribute(dimension?.["@_value"]) ?? attribute(item?.["@_TIME_PERIOD"]) ?? "";
+    const date = periodDate(period, cadence);
+    const numeric = parseFiniteNumber(attribute(value?.["@_value"]) ?? attribute(item?.["@_OBS_VALUE"]));
     return date && numeric !== null ? { date, value: numeric } : null;
   });
   if (parsed.length === 0 || parsed.some((item) => item === null)) return null;
@@ -270,9 +288,10 @@ function datasetSeries(xml: string): XmlRecord[] | null {
   if (typeof xml !== "string" || /<\s*html\b/i.test(xml)) return null;
   try {
     const root = record(parseXmlWithAttributes(xml));
-    const genericData = record(root?.GenericData);
-    const dataSet = record(genericData?.DataSet);
-    const series = asArray(dataSet?.Series).map(record).filter((item): item is XmlRecord => item !== null);
+    const dataContainer = record(root?.GenericData) ?? record(root?.MessageGroup);
+    const dataSets = asArray(dataContainer?.DataSet).map(record).filter((item): item is XmlRecord => item !== null);
+    const series = dataSets.flatMap((dataSet) => asArray(dataSet.Series)
+      .map(record).filter((item): item is XmlRecord => item !== null));
     return series.length ? series : null;
   } catch {
     return null;
@@ -494,7 +513,7 @@ export function parseFederalReserveCreditPerformanceXml(xml: string, retrievedAt
     const candidates = allSeries.filter((item) => seriesDimensions(item).get("SERIES_NAME") === identifier);
     const exact = candidates.filter((item) => {
       const dims = seriesDimensions(item);
-      return dims.get("SERIES_NAME") === identifier && dims.get("FREQ") === "128" && dims.get("ADJUSTED") === "SA" &&
+      return dims.get("SERIES_NAME") === identifier && ["128", "162"].includes(dims.get("FREQ") ?? "") && dims.get("ADJUSTED") === "SA" &&
         dims.get("UNIT") === "Percentage" && dims.get("UNIT_MULT") === "1";
     });
     const spec = { sourceId: sourceIds.creditPerformance, identifier };
@@ -553,15 +572,41 @@ export async function fetchFederalReserveH6M2(options: AdapterOptions = {}): Pro
   }
 }
 
-function latestSloosChartUrl(indexHtml: string): string | null {
-  const matches = Array.from(indexHtml.matchAll(/href=["']([^"']*sloos-(\d{6})-chart-data\.htm)["']/gi));
-  const latest = matches.sort((a, b) => b[2].localeCompare(a[2]))[0];
-  if (!latest) return null;
-  try {
-    return new URL(latest[1], sloosIndexEndpoint).toString();
-  } catch {
-    return null;
-  }
+function latestSloosRelease(indexHtml: string): { url: string; period: string } | null {
+  const base = new URL(sloosIndexEndpoint);
+  const matches = Array.from(indexHtml.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi))
+    .flatMap((match) => {
+      try {
+        const url = new URL(match[1], base);
+        const period = /\/data\/sloos\/sloos-(\d{6})\.htm$/i.exec(url.pathname)?.[1];
+        if (url.origin !== base.origin || !period || Number(period.slice(4, 6)) < 1 || Number(period.slice(4, 6)) > 12) return [];
+        return [{ url: url.toString(), period }];
+      } catch {
+        return [];
+      }
+    });
+  const latestPeriod = matches.map(({ period }) => period).sort().at(-1);
+  if (!latestPeriod) return null;
+  const latest = Array.from(new Set(matches.filter(({ period }) => period === latestPeriod).map(({ url }) => url)));
+  return latest.length === 1 ? { url: latest[0], period: latestPeriod } : null;
+}
+
+function sloosChartUrl(releaseHtml: string, releaseUrl: string, period: string): string | null {
+  const base = new URL(sloosIndexEndpoint);
+  const expectedPath = `/data/sloos/sloos-${period}-chart-data.htm`;
+  const matches = Array.from(releaseHtml.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi))
+    .flatMap((match) => {
+      try {
+        const url = new URL(match[1], releaseUrl);
+        return url.origin === base.origin && url.pathname.toLowerCase() === expectedPath.toLowerCase()
+          ? [url.toString()]
+          : [];
+      } catch {
+        return [];
+      }
+    });
+  const unique = Array.from(new Set(matches));
+  return unique.length === 1 ? unique[0] : null;
 }
 
 export async function fetchFederalReserveSloos(options: AdapterOptions = {}): Promise<CoreObservationSeriesResult[]> {
@@ -572,8 +617,11 @@ export async function fetchFederalReserveSloos(options: AdapterOptions = {}): Pr
   ];
   try {
     const indexHtml = await responseText(sloosIndexEndpoint, options, 21_600);
-    const chartUrl = latestSloosChartUrl(indexHtml);
-    if (!chartUrl) return specs.map((spec) => unavailable(spec, retrievedAt, "MISSING", "The SLOOS index did not identify a current chart-data release."));
+    const release = latestSloosRelease(indexHtml);
+    if (!release) return specs.map((spec) => unavailable(spec, retrievedAt, "MISSING", "The SLOOS index did not identify one latest official release page."));
+    const releaseHtml = await responseText(release.url, options, 21_600);
+    const chartUrl = sloosChartUrl(releaseHtml, release.url, release.period);
+    if (!chartUrl) return specs.map((spec) => unavailable(spec, retrievedAt, "MISSING", "The latest SLOOS release page did not identify its matching chart-data page."));
     return parseFederalReserveSloosChartData(await responseText(chartUrl, options, 21_600), retrievedAt);
   } catch {
     return specs.map((spec) => unavailable(spec, null, "FAILED", "The official SLOOS chart-data source was unavailable."));

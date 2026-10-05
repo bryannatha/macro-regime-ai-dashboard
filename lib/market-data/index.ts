@@ -114,12 +114,7 @@ export async function getDashboardPayload(options: DashboardOptions = {}): Promi
   const now = options.now ?? new Date();
   const generatedAt = now.toISOString();
   const adapterOptions = { fetchImpl: options.fetchImpl, now };
-  const coreAdapterOptions: CoreHistoryOptions = options.loadCoreSources
-    ? adapterOptions
-    : {
-        ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
-        ...(options.now ? { now: options.now } : {}),
-      };
+  const coreAdapterOptions: CoreHistoryOptions = adapterOptions;
 
   const [bls, oil, treasury, claims, dollar, mempool, usdidr, coreSources] = await Promise.all([
     isolateFailure(

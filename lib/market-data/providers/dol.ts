@@ -95,6 +95,12 @@ function unavailableCoreClaims(
   };
 }
 
+function isBlankClaimsValue(value: unknown): boolean {
+  if (typeof value !== "string") return false;
+  const trimmed = value.trim();
+  return trimmed === "" || /^(?:&#0*160;|&#x0*a0;|&nbsp;)$/i.test(trimmed);
+}
+
 export function parseDolCoreClaims(xml: string, retrievedAt: string): CoreObservationSeriesResult {
   try {
     if (typeof xml !== "string" || !parseIsoDate(retrievedAt.slice(0, 10))) {
@@ -107,20 +113,32 @@ export function parseDolCoreClaims(xml: string, retrievedAt: string): CoreObserv
     }
 
     const rows: Array<{ date: string; value: number }> = [];
+    const periodDates: string[] = [];
+    let hasMissingHistoricalPeriod = false;
+    const retrievalDate = Date.parse(`${retrievedAt.slice(0, 10)}T00:00:00.000Z`);
     const reportRunDate = parseUsDate(root?.["@_rundate"]);
     const version = reportRunDate ? `report-run:${reportRunDate}` : null;
     for (const rawWeek of rawWeeks) {
       const week = rawWeek as Record<string, unknown>;
       const date = parseUsDate(week.weekEnded);
       const claims = week.InitialClaims as Record<string, unknown> | undefined;
-      const value = parseFiniteNumber(claims?.SA);
-      if (!date || value === null || value < 0 || value > 1_000_000) {
+      const rawValue = claims?.SA;
+      if (!date) {
+        return unavailableCoreClaims(retrievedAt, "FAILED", "A DOL row lacked a valid week-ending date or SA claims value.");
+      }
+      periodDates.push(date);
+      if (isBlankClaimsValue(rawValue)) {
+        if (Date.parse(`${date}T00:00:00.000Z`) <= retrievalDate) hasMissingHistoricalPeriod = true;
+        continue;
+      }
+      const value = parseFiniteNumber(rawValue);
+      if (value === null || value < 0 || value > 10_000_000) {
         return unavailableCoreClaims(retrievedAt, "FAILED", "A DOL row lacked a valid week-ending date or SA claims value.");
       }
       rows.push({ date, value: value / 1000 });
     }
     rows.sort((a, b) => a.date.localeCompare(b.date));
-    if (new Set(rows.map((row) => row.date)).size !== rows.length) {
+    if (new Set(periodDates).size !== periodDates.length) {
       return unavailableCoreClaims(retrievedAt, "FAILED", "The DOL report contained duplicate week-ending observations.");
     }
     if (rows.length < 4) {
@@ -131,7 +149,6 @@ export function parseDolCoreClaims(xml: string, retrievedAt: string): CoreObserv
       return unavailableCoreClaims(retrievedAt, "MISSING", "The DOL report did not contain four contiguous weekly observations.");
     }
 
-    const retrievalDate = Date.parse(`${retrievedAt.slice(0, 10)}T00:00:00.000Z`);
     const latestDate = Date.parse(`${recent.at(-1)!.date}T00:00:00.000Z`);
     const ageDays = (retrievalDate - latestDate) / 86_400_000;
     if (!Number.isFinite(ageDays) || ageDays < 0 || ageDays > 21) {
@@ -155,7 +172,7 @@ export function parseDolCoreClaims(xml: string, retrievedAt: string): CoreObserv
       version,
       vintage: null,
     }));
-    const historyIsContiguous = rows.every((row, index) => index === 0 ||
+    const historyIsContiguous = !hasMissingHistoricalPeriod && rows.every((row, index) => index === 0 ||
       Date.parse(row.date) - Date.parse(rows[index - 1].date) === 7 * 86_400_000);
     const hasLongHistory = observations.length >= 520 &&
       observations[0].observedAt <= "2015-01-10" && historyIsContiguous;

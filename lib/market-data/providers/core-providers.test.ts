@@ -528,6 +528,56 @@ describe("official anchor source adapters", () => {
     expect(parseDolCoreClaims(duplicate, retrievedAt)).toMatchObject({ state: "FAILED", observations: [] });
   });
 
+  it("keeps blank DOL SA cells missing without failing or bridging historical claims", () => {
+    const complete = parseDolCoreClaims(claimsHistoryXml(), retrievedAt);
+    const withMissingWeek = claimsHistoryXml().replace(
+      "<week><weekEnded>10/03/2020</weekEnded><InitialClaims><SA>190300</SA></InitialClaims></week>",
+      "<week><weekEnded>10/03/2020</weekEnded><InitialClaims><SA>\u00a0</SA></InitialClaims></week>",
+    );
+    const result = parseDolCoreClaims(withMissingWeek, retrievedAt);
+
+    expect(result).toMatchObject({ state: "AVAILABLE", parserStatus: "VERIFIED", historyStatus: "PARTIAL" });
+    expect(result.observations).toHaveLength(complete.observations.length - 1);
+    expect(result.observations.some(({ observedAt }) => observedAt === "2020-10-03")).toBe(false);
+  });
+
+  it("treats DOL's escaped nonbreaking-space marker as a missing SA value", () => {
+    const withMissingWeek = claimsHistoryXml().replace(
+      "<week><weekEnded>10/03/2020</weekEnded><InitialClaims><SA>190300</SA></InitialClaims></week>",
+      "<week><weekEnded>10/03/2020</weekEnded><InitialClaims><SA>&amp;#160;</SA></InitialClaims></week>",
+    );
+    const result = parseDolCoreClaims(withMissingWeek, retrievedAt);
+
+    expect(result).toMatchObject({ state: "AVAILABLE", parserStatus: "VERIFIED", historyStatus: "PARTIAL" });
+    expect(result.observations.some(({ observedAt }) => observedAt === "2020-10-03")).toBe(false);
+  });
+
+  it("preserves valid seven-digit DOL claims counts from the pandemic history", () => {
+    const xml = `<r539cyNational rundate="10/03/2026">
+      <week><weekEnded>03/21/2020</weekEnded><InitialClaims><SA>2914000</SA></InitialClaims></week>
+      <week><weekEnded>09/05/2026</weekEnded><InitialClaims><SA>190000</SA></InitialClaims></week>
+      <week><weekEnded>09/12/2026</weekEnded><InitialClaims><SA>200000</SA></InitialClaims></week>
+      <week><weekEnded>09/19/2026</weekEnded><InitialClaims><SA>210000</SA></InitialClaims></week>
+      <week><weekEnded>09/26/2026</weekEnded><InitialClaims><SA>220000</SA></InitialClaims></week>
+    </r539cyNational>`;
+    const result = parseDolCoreClaims(xml, retrievedAt);
+
+    expect(result).toMatchObject({ state: "AVAILABLE", parserStatus: "VERIFIED" });
+    expect(result.observations.find(({ observedAt }) => observedAt === "2020-03-21")).toMatchObject({ value: 2914, unit: "thousand claims" });
+  });
+
+  it("ignores blank DOL rows dated after retrieval without creating observations", () => {
+    const xml = fixture("dol-claims-core.xml").replace(
+      "</r539cyNational>",
+      "<week><weekEnded>10/10/2026</weekEnded><InitialClaims><SA>\u00a0</SA></InitialClaims></week></r539cyNational>",
+    );
+    const result = parseDolCoreClaims(xml, retrievedAt);
+
+    expect(result).toMatchObject({ state: "AVAILABLE", parserStatus: "VERIFIED" });
+    expect(result.observations).toHaveLength(4);
+    expect(result.observations.some(({ observedAt }) => observedAt === "2026-10-10")).toBe(false);
+  });
+
   it("marks DOL observations stale without treating report run date as publication date", () => {
     const oldClaims = fixture("dol-claims-core.xml")
       .replaceAll("09/05/2026", "07/04/2026")

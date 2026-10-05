@@ -63,13 +63,14 @@ async function isolateProvider(
 
 export async function fetchCoreHistorySources(options: CoreHistoryOptions = {}): Promise<CoreObservationSeriesResult[]> {
   const retrievedAt = (options.now ?? new Date()).toISOString();
+  const bypassCache = options.fetchImpl !== undefined || options.historyStartYear !== undefined;
   const [bls, bea, claims, production, policy, h41, h6, sloos, h8, credit] = await Promise.all([
     isolateProvider(["bls-cpi", "bls-labor"], fetchBlsCoreSources(options), retrievedAt),
-    isolateProvider(["bea-gdp", "bea-pce-income"], options.fetchImpl || options.now || options.historyStartYear !== undefined
+    isolateProvider(["bea-gdp", "bea-pce-income"], bypassCache
       ? fetchBeaCoreSources(options)
       : fetchCachedBeaSources(), retrievedAt),
     isolateProvider(["dol-initial-claims"], fetchDolCoreClaims(options), retrievedAt),
-    isolateProvider(["federal-reserve-g17-ip"], options.fetchImpl || options.now || options.historyStartYear !== undefined
+    isolateProvider(["federal-reserve-g17-ip"], bypassCache
       ? fetchFederalReserveIndustrialProduction(options)
       : fetchCachedIndustrialProduction(), retrievedAt),
     isolateProvider(["federal-reserve-policy-actions"], fetchFederalReservePolicyActions(options), retrievedAt),
