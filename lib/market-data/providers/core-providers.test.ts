@@ -3,14 +3,31 @@ import { describe, expect, it, vi } from "vitest";
 import { fetchBlsCoreSources, parseBlsCoreSources } from "./bls";
 import { CORE_SCORE_ANCHORS, transformAnnualized3m, transformUnemploymentGap, transformYoY } from "../core-transformations";
 import { fetchBeaCoreSources, parseBeaSection1Sheets, parseBeaSection2Sheets } from "./bea";
-import { fetchDolCoreClaims, parseDolCoreClaims } from "./dol";
-import { fetchFederalReserveIndustrialProduction, parseFederalReserveIndustrialProduction, parseFederalReservePolicyActions } from "./federal-reserve-core";
+import { fetchDolCoreClaims, parseDolCoreClaims, parseDolCoreClaimsReleaseText } from "./dol";
+import { fetchFederalReserveIndustrialProduction, parseFederalReserveH41Liquidity, parseFederalReserveIndustrialProduction, parseFederalReservePolicyActions } from "./federal-reserve-core";
 import { parseTreasuryRealYieldCore } from "./treasury";
 import { getSourceRegistry } from "@/lib/market-data/source-registry";
 import type { CoreObservationSeriesResult } from "@/lib/market-data/types";
 
 const retrievedAt = "2026-10-04T12:00:00.000Z";
 const fixture = (name: string) => readFileSync(new URL(`../fixtures/${name}`, import.meta.url), "utf8");
+
+vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
+  getDocument: ({ data }: { data: Uint8Array }) => {
+    const lines = new TextDecoder().decode(data).split("\n");
+    return {
+      promise: Promise.resolve({
+        numPages: 1,
+        getPage: async () => ({
+          getTextContent: async () => ({
+            items: lines.map((str, index) => ({ str, transform: [1, 0, 0, 1, 0, 800 - index * 12] })),
+          }),
+        }),
+        destroy: async () => undefined,
+      }),
+    };
+  },
+}));
 
 type SeriesResult = CoreObservationSeriesResult;
 
@@ -153,6 +170,70 @@ function claimsHistoryXml(missingIndex?: number): string {
   return `<r539cyNational rundate="10/03/2026">${weeks}</r539cyNational>`;
 }
 
+function dolReleaseText(lastDate = "2026-09-26", releaseDate = "October 1, 2026"): string[] {
+  const last = Date.parse(`${lastDate}T00:00:00.000Z`);
+  const first = last - 53 * 7 * 86_400_000;
+  const rows = Array.from({ length: 54 }, (_, index) => {
+    const date = new Date(first + index * 7 * 86_400_000).toLocaleDateString("en-US", {
+      month: "long", day: "numeric", year: "numeric", timeZone: "UTC",
+    });
+    return `${date} ${index === 53 ? 197 : 200} 0 200.00 1,700 -10 1,720.00 1.1`;
+  });
+  return [
+    "TRANSMISSION OF MATERIALS IN THIS RELEASE IS EMBARGOED UNTIL",
+    "UNEMPLOYMENT INSURANCE WEEKLY CLAIMS",
+    "SEASONALLY ADJUSTED DATA",
+    `8:30 A.M. (Eastern) Thursday, ${releaseDate}`,
+    "Seasonally Adjusted US Weekly UI Claims (in thousands)",
+    "Change Change",
+    "from from",
+    "Initial Prior 4-Week Insured Prior 4-Week",
+    "Week Ending Claims Week Average Unemployment Week Average IUR",
+    ...rows,
+  ];
+}
+
+describe("H.4.1 liquidity source adapter", () => {
+  it("parses official abbreviated weekly dates and nonbreaking-space values without substituting Wednesday assets", () => {
+    const html = `<html><body><h1>Factors Affecting Reserve Balances</h1>
+      <table>
+        <tr><td>Averages of daily figures</td><td>Wednesday Sep 30, 2026</td></tr>
+        <tr><td>Week ended Sep 30, 2026</td></tr>
+        <tr><td>Reserve Bank credit</td><td>&#xa0; 6,692,033</td></tr>
+        <tr><td>Reverse repurchase agreements 12</td><td>&#xa0; 329,260</td></tr>
+        <tr><td>Others</td><td>&#xa0; 3,742</td></tr>
+        <tr><td>U.S. Treasury, General Account</td><td>&#xa0; 948,674</td></tr>
+        <tr><td>Reserve balances with Federal Reserve Banks</td><td>&#xa0; 2,948,090</td></tr>
+      </table>
+      <table><tr><td>Total assets</td><td>(0)</td><td>6,743,031</td><td>- 4,673</td><td>+ 155,912</td></tr></table>
+      </body></html>`;
+    const results = parseFederalReserveH41Liquidity(html, retrievedAt);
+    const result = (identifier: string) => results.find((item) => item.identifier === identifier);
+
+    expect(result("H.4.1 Table 1 / Total assets / weekly average")).toMatchObject({ state: "MISSING", observations: [] });
+    expect(result("H.4.1 Table 1 / U.S. Treasury, General Account / weekly average")).toMatchObject({
+      state: "AVAILABLE",
+      observations: [{ value: 948674, observedAt: "2026-09-30", unit: "millions USD", seasonalBasis: "weekly average" }],
+    });
+    expect(result("H.4.1 Table 1 / Reverse repurchase agreements: Others / weekly average")).toMatchObject({
+      state: "AVAILABLE",
+      observations: [{ value: 3742, observedAt: "2026-09-30", seasonalBasis: "weekly average" }],
+    });
+    expect(result("H.4.1 Table 1 / Reserve balances with Federal Reserve Banks / weekly average")).toMatchObject({
+      state: "AVAILABLE",
+      observations: [{ value: 2948090, observedAt: "2026-09-30", seasonalBasis: "weekly average" }],
+    });
+    expect(result("H.4.1 Table 1 / Reserve Bank credit / weekly average")).toMatchObject({
+      state: "AVAILABLE",
+      observations: [{ value: 6692033, observedAt: "2026-09-30", seasonalBasis: "weekly average" }],
+    });
+    expect(result("H.4.1 Table 5 / Total assets / Wednesday")).toMatchObject({
+      state: "AVAILABLE",
+      observations: [{ value: 6743031, observedAt: "2026-09-30", seasonalBasis: "Wednesday" }],
+    });
+  });
+});
+
 describe("official anchor source adapters", () => {
   it("keeps adapter identities aligned with the admitted official registry", () => {
     const sources = getSourceRegistry();
@@ -168,7 +249,12 @@ describe("official anchor source adapters", () => {
       endpoint: "https://api.bls.gov/publicAPI/v1/timeseries/data/",
       firstUsablePeriod: "2013-01 (diagnostic warm-up; dashboard adapter defaults to 2015-01)",
     });
-    expect(source("dol-initial-claims")?.firstUsablePeriod).toBe("2015-01-03 (adapter history window)");
+    expect(source("dol-initial-claims")).toMatchObject({
+      endpoint: "https://oui.doleta.gov/unemploy/weeklyRedirect.php",
+      firstUsablePeriod: "Rolling one-year table in current weekly release; longer history unavailable",
+      releaseDateQuality: 1,
+      sourceHealth: "AVAILABLE",
+    });
     expect(source("bea-gdp")).toMatchObject({
       identifiers: ["T10101-Q / A191RL", "T10106-Q / A191RX"],
       firstUsablePeriod: "A191RL: 1947Q2; A191RX: 1947Q1",
@@ -483,6 +569,113 @@ describe("official anchor source adapters", () => {
     });
   });
 
+  it("parses the current DOL national SA weekly release without inventing long history", () => {
+    const result = parseDolCoreClaimsReleaseText(dolReleaseText(), "2026-10-05T15:00:00.000Z");
+
+    expect(result).toMatchObject({
+      sourceId: "dol-initial-claims",
+      identifier: "U.S. initial claims, seasonally adjusted (InitialClaims.SA)",
+      state: "AVAILABLE",
+      parserStatus: "VERIFIED",
+      historyStatus: "PARTIAL",
+      retrievedAt: "2026-10-05T15:00:00.000Z",
+    });
+    expect(result.observations).toHaveLength(54);
+    expect(result.observations.at(-1)).toMatchObject({
+      value: 197,
+      unit: "thousand claims",
+      seasonalBasis: "SA",
+      observedAt: "2026-09-26",
+      releasedAt: "2026-10-01",
+      retrievedAt: "2026-10-05T15:00:00.000Z",
+      releaseDateQuality: 1,
+      version: "release:2026-10-01",
+      vintage: null,
+    });
+    expect(result.reason).toContain("longer history remains unavailable");
+  });
+
+  it("uses the latest observation rather than a fresh retrieval to determine DOL claims freshness", () => {
+    const rows = ["2026-08-22", "2026-08-29", "2026-09-05", "2026-09-12"].map((isoDate) => {
+      const [year, month, day] = isoDate.split("-").map(Number);
+      const date = new Date(Date.UTC(year, month - 1, day)).toLocaleDateString("en-US", {
+        month: "long", day: "numeric", year: "numeric", timeZone: "UTC",
+      });
+      return `${date} 196 0 200.00 1,700 -10 1,720.00 1.1`;
+    });
+    const result = parseDolCoreClaimsReleaseText([
+      "UNEMPLOYMENT INSURANCE WEEKLY CLAIMS",
+      "SEASONALLY ADJUSTED DATA",
+      "8:30 A.M. (Eastern) Thursday, September 17, 2026",
+      "Seasonally Adjusted US Weekly UI Claims (in thousands)",
+      "Change Change",
+      "from from",
+      "Initial Prior 4-Week Insured Prior 4-Week",
+      "Week Ending Claims Week Average Unemployment Week Average IUR",
+      ...rows,
+    ], "2026-10-05T15:00:00.000Z");
+
+    expect(result).toMatchObject({
+      state: "STALE",
+      parserStatus: "VERIFIED",
+      observations: [],
+      reason: "The latest DOL weekly claims observation is older than the weekly freshness window.",
+    });
+  });
+
+  it("fails closed when the official DOL release or SA table headers change", () => {
+    const validRelease = dolReleaseText();
+    const invalidReleases = [
+      validRelease.filter((line) => line !== "UNEMPLOYMENT INSURANCE WEEKLY CLAIMS"),
+      validRelease.filter((line) => line !== "SEASONALLY ADJUSTED DATA"),
+      validRelease.map((line) => line.replace("Seasonally Adjusted US Weekly UI Claims (in thousands)", "US Weekly UI Claims (in thousands)")),
+      validRelease.filter((line) => line !== "Week Ending Claims Week Average Unemployment Week Average IUR"),
+    ];
+
+    for (const lines of invalidReleases) {
+      expect(parseDolCoreClaimsReleaseText(lines, "2026-10-05T15:00:00.000Z")).toMatchObject({
+        state: "FAILED",
+        parserStatus: "FAILED",
+        historyStatus: "PARTIAL",
+        observations: [],
+      });
+    }
+  });
+
+  it("fails closed when the DOL claims and change columns are reordered", () => {
+    const reordered = dolReleaseText().map((line) => {
+      if (line === "Initial Prior 4-Week Insured Prior 4-Week") {
+        return "Prior Initial 4-Week Insured Prior 4-Week";
+      }
+      if (line === "Week Ending Claims Week Average Unemployment Week Average IUR") {
+        return "Week Ending Week Claims Average Unemployment Week Average IUR";
+      }
+      return line;
+    });
+
+    expect(parseDolCoreClaimsReleaseText(reordered, "2026-10-05T15:00:00.000Z")).toMatchObject({
+      state: "FAILED",
+      parserStatus: "FAILED",
+      historyStatus: "PARTIAL",
+      observations: [],
+    });
+  });
+
+  it("fetches DOL claims from the official weekly release redirect", async () => {
+    let requestUrl = "";
+    const result = await fetchDolCoreClaims({
+      now: new Date("2026-10-05T15:00:00.000Z"),
+      fetchImpl: async (input) => {
+        requestUrl = String(input);
+        return new Response(dolReleaseText().join("\n"), { status: 200 });
+      },
+    });
+
+    expect(requestUrl).toBe("https://oui.doleta.gov/unemploy/weeklyRedirect.php");
+    expect(result).toMatchObject({ state: "AVAILABLE", historyStatus: "PARTIAL" });
+    expect(result.observations.at(-1)).toMatchObject({ value: 197, observedAt: "2026-09-26" });
+  });
+
   it("does not infer a DOL publication date from report run date or substitute NSA claims", () => {
     const withNoRunDate = fixture("dol-claims-core.xml").replace(' rundate="10/03/2026"', "");
     const result = parseDolCoreClaims(withNoRunDate, retrievedAt) as SeriesResult;
@@ -587,24 +780,19 @@ describe("official anchor source adapters", () => {
     expect(parseDolCoreClaims(oldClaims, retrievedAt)).toMatchObject({ state: "STALE", observations: [] });
   });
 
-  it("requests DOL claims history from 2015 for the core series adapter", async () => {
+  it("requests the official national DOL weekly release for current claims", async () => {
     let requestUrl = "";
-    let requestBody = "";
     const result = await fetchDolCoreClaims({
       now: new Date(retrievedAt),
-      fetchImpl: async (input, init) => {
+      fetchImpl: async (input) => {
         requestUrl = String(input);
-        requestBody = String(init?.body);
-        return new Response(fixture("dol-claims-core.xml"), { status: 200 });
+        return new Response(dolReleaseText().join("\n"), { status: 200 });
       },
     });
 
-    const form = new URLSearchParams(requestBody);
-    expect(requestUrl).toBe("https://oui.doleta.gov/unemploy/wkclaims/report.asp");
-    expect(form.get("strtdate")).toBe("2015");
-    expect(form.get("enddate")).toBe("2026");
-    expect(form.get("filetype")).toBe("xml");
-    expect(result.state).toBe("AVAILABLE");
+    expect(requestUrl).toBe("https://oui.doleta.gov/unemploy/weeklyRedirect.php");
+    expect(result).toMatchObject({ state: "AVAILABLE", historyStatus: "PARTIAL" });
+    expect(result.observations.at(-1)).toMatchObject({ value: 197, observedAt: "2026-09-26" });
   });
 
   it("marks long DOL history verified only when all weekly periods are contiguous", () => {

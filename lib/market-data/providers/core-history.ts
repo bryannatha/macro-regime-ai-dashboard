@@ -21,14 +21,30 @@ export interface CoreHistoryOptions extends AdapterOptions {
   preservePartialHistory?: boolean;
 }
 
+class UncacheableCoreSourceResults extends Error {
+  constructor(readonly results: CoreObservationSeriesResult[]) {
+    super("Unavailable or empty core source results cannot be cached.");
+  }
+}
+
+function requireCacheableSources<T extends CoreObservationSeriesResult | CoreObservationSeriesResult[]>(result: T): T {
+  const sources: CoreObservationSeriesResult[] = Array.isArray(result)
+    ? result as CoreObservationSeriesResult[]
+    : [result as CoreObservationSeriesResult];
+  if (sources.length === 0 || sources.some(({ state, observations }) => state !== "AVAILABLE" || observations.length === 0)) {
+    throw new UncacheableCoreSourceResults(sources);
+  }
+  return result;
+}
+
 const fetchCachedIndustrialProduction = unstable_cache(
-  () => fetchFederalReserveIndustrialProduction(),
+  async () => requireCacheableSources(await fetchFederalReserveIndustrialProduction()),
   ["macro-regime-federal-reserve-g17-ip-v1"],
   { revalidate: 21600 },
 );
 
 const fetchCachedBeaSources = unstable_cache(
-  () => fetchBeaCoreSources(),
+  async () => requireCacheableSources(await fetchBeaCoreSources()),
   ["macro-regime-bea-core-series-v1"],
   { revalidate: 86400 },
 );
@@ -56,7 +72,8 @@ async function isolateProvider(
   try {
     const result = await operation;
     return Array.isArray(result) ? result : [result];
-  } catch {
+  } catch (error) {
+    if (error instanceof UncacheableCoreSourceResults) return error.results;
     return failedSeries(sourceIds, retrievedAt);
   }
 }

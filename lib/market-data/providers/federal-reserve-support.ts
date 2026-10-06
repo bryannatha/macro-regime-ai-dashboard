@@ -107,7 +107,7 @@ function available(
 
 function htmlText(value: string): string {
   return value.replace(/<[^>]*>/g, " ")
-    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&nbsp;|&#160;|&#x0*a0;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/&ndash;|&#8211;/gi, "-")
     .replace(/&mdash;|&#8212;/gi, "-")
@@ -128,10 +128,10 @@ function numberCells(cells: string[]): number[] {
 }
 
 function longDate(input: string): string | null {
-  const match = /^(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})$/i.exec(input.trim());
+  const match = /^(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2}),?\s+(\d{4})$/i.exec(input.trim());
   if (!match) return null;
-  const months = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
-  const month = months.indexOf(match[1].toLowerCase()) + 1;
+  const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+  const month = months.indexOf(match[1].slice(0, 3).toLowerCase()) + 1;
   return parseIsoDate(`${match[3]}-${String(month).padStart(2, "0")}-${match[2].padStart(2, "0")}`);
 }
 
@@ -174,7 +174,7 @@ export function parseFederalReserveH41Liquidity(html: string, retrievedAt: strin
   const tga = byLabel("U.S. Treasury, General Account");
   const reserveBalances = byLabel("Reserve balances with Federal Reserve Banks");
   const allRows = rows;
-  const rrpParentIndex = allRows.findIndex((row) => /^Reverse repurchase agreements$/i.test(row[0]));
+  const rrpParentIndex = allRows.findIndex((row) => /^Reverse repurchase agreements(?:\s+\d+)?$/i.test(row[0]));
   const rrpOthersRow = rrpParentIndex >= 0
     ? allRows.slice(rrpParentIndex + 1).find((row) => /^Others$/i.test(row[0]))
     : undefined;
@@ -202,7 +202,6 @@ export function parseFederalReserveH41Liquidity(html: string, retrievedAt: strin
   const wednesdayDateMatch = /Wednesday\s+([A-Za-z]+\s+\d{1,2},?\s+\d{4})/i.exec(plain);
   const wednesdayDate = wednesdayDateMatch ? longDate(wednesdayDateMatch[1]) : null;
   const wednesdayAssets = asResult(sourceIds.h41, identifiers.h41WednesdayAssets, totalAssetsRow, wednesdayDate, retrievedAt, {
-    valueIndex: -1,
     unit: "millions USD",
     basis: "Wednesday",
     missingReason: "The H.4.1 Wednesday total-assets row was absent or invalid.",

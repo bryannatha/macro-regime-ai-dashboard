@@ -10,6 +10,44 @@ const fixture = (name: string) => readFileSync(new URL(`./fixtures/${name}`, imp
 const jsonFixture = (name: string) => JSON.parse(fixture(name)) as unknown;
 const excludedKeys: ObservationKey[] = ["btcPrice", "hySpread", "goldPrice", "stablecoinMarketCap"];
 
+vi.mock("pdfjs-dist/legacy/build/pdf.mjs", () => ({
+  getDocument: ({ data }: { data: Uint8Array }) => {
+    const lines = new TextDecoder().decode(data).split("\n");
+    return {
+      promise: Promise.resolve({
+        numPages: 1,
+        getPage: async () => ({
+          getTextContent: async () => ({
+            items: lines.map((str, index) => ({ str, transform: [1, 0, 0, 1, 0, 800 - index * 12] })),
+          }),
+        }),
+        destroy: async () => undefined,
+      }),
+    };
+  },
+}));
+
+function dolReleaseFixture(): string {
+  const last = Date.parse("2026-09-26T00:00:00.000Z");
+  const rows = Array.from({ length: 54 }, (_, index) => {
+    const date = new Date(last - (53 - index) * 7 * 86_400_000).toLocaleDateString("en-US", {
+      month: "long", day: "numeric", year: "numeric", timeZone: "UTC",
+    });
+    return `${date} ${index === 53 ? 197 : 200} 0 200.00 1,700 -10 1,720.00 1.1`;
+  });
+  return [
+    "UNEMPLOYMENT INSURANCE WEEKLY CLAIMS",
+    "SEASONALLY ADJUSTED DATA",
+    "8:30 A.M. (Eastern) Thursday, October 1, 2026",
+    "Seasonally Adjusted US Weekly UI Claims (in thousands)",
+    "Change Change",
+    "from from",
+    "Initial Prior 4-Week Insured Prior 4-Week",
+    "Week Ending Claims Week Average Unemployment Week Average IUR",
+    ...rows,
+  ].join("\n");
+}
+
 function fixtureFetch(fail?: (url: URL) => boolean): typeof fetch {
   return vi.fn<typeof fetch>(async (input) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
@@ -21,7 +59,7 @@ function fixtureFetch(fail?: (url: URL) => boolean): typeof fetch {
       const real = url.searchParams.get("data") === "daily_treasury_real_yield_curve";
       return new Response(fixture(real ? "treasury-real-yield.xml" : "treasury-yield.xml"));
     }
-    if (url.hostname === "oui.doleta.gov") return new Response(fixture("dol-claims.xml"));
+    if (url.hostname === "oui.doleta.gov") return new Response(dolReleaseFixture());
     if (url.hostname === "fred.stlouisfed.org") return new Response(fixture("fed-broad-dollar.csv"));
     if (url.hostname === "mempool.space") {
       return Response.json(url.pathname.endsWith("/mempool")
@@ -40,8 +78,8 @@ function inflationCoreSeries(
   seasonalBasis: string,
   startYear = 2025,
   startMonth = 8,
+  retrievedAt = generatedAt,
 ): CoreObservationSeriesResult {
-  const retrievedAt = generatedAt;
   const observations: CoreSourceObservation[] = Array.from({ length: 14 }, (_, index) => {
     const serial = startYear * 12 + startMonth - 1 + index;
     const year = Math.floor(serial / 12);
@@ -143,6 +181,28 @@ describe("getDashboardPayload", () => {
       retrievedAt: generatedAt,
     });
     expect(payload.sourceRegistry.find((source) => source.id === "bls-cpi")?.healthReason).toContain("1 of 4");
+  });
+
+  it("uses a completion-time as-of so fresh sources retrieved during the request are not future-dated", async () => {
+    const payload = await getDashboardPayload({
+      fetchImpl: fixtureFetch(),
+      loadCoreSources: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        const retrievedAt = new Date().toISOString();
+        return [
+          inflationCoreSeries("bls-cpi", "CUUR0000SA0L1E", "index (1982-84=100)", "NSA", 2025, 8, retrievedAt),
+          inflationCoreSeries("bea-pce-income", "T20804-M / DPCCRG", "index (2017=100)", "SA", 2025, 8, retrievedAt),
+        ];
+      },
+    });
+
+    expect(payload.regime.factorReadiness.inflation).toMatchObject({
+      eligibleFamilies: 2,
+      classifiable: true,
+    });
+    const retrievedAt = payload.sourceRegistry.find((source) => source.id === "bls-cpi")?.retrievedAt;
+    expect(retrievedAt).not.toBeNull();
+    expect(Date.parse(retrievedAt!)).toBeLessThanOrEqual(Date.parse(payload.generatedAt));
   });
 
   it("loads the registered core adapters on the default dashboard service path", async () => {
