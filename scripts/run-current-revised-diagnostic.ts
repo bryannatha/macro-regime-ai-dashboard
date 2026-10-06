@@ -15,7 +15,6 @@ const reportPath = resolve(
 const loadCoreHistory = () => fetchCoreHistorySources({
   now: new Date(),
   historyStartYear: 2013,
-  preservePartialHistory: true,
 });
 
 async function main() {

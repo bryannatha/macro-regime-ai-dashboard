@@ -110,8 +110,6 @@ const coreSeries = [
   { sourceId: "bls-labor", identifier: "LNS14000000", unit: "percent", seasonalBasis: "SA", positive: false },
 ] as const;
 
-const minimumMonthlyHistory = 120;
-
 function coreResult(
   sourceId: string,
   identifier: string,
@@ -121,8 +119,9 @@ function coreResult(
   historyStatus: CoreObservationSeriesResult["historyStatus"],
   observations: CoreSourceObservation[] = [],
   reason: string | null = null,
+  missingPeriods: string[] = [],
 ): CoreObservationSeriesResult {
-  return { sourceId, identifier, retrievedAt, state, parserStatus, historyStatus, observations, reason };
+  return { sourceId, identifier, retrievedAt, state, parserStatus, historyStatus, observations, reason, missingPeriods };
 }
 
 function blsCoreFailures(
@@ -145,7 +144,6 @@ function blsCoreFailures(
 export function parseBlsCoreSources(
   payload: unknown,
   retrievedAt: string,
-  options: { preservePartialHistory?: boolean } = {},
 ): CoreObservationSeriesResult[] {
   const verifiedRetrievedAt = parseIsoDate(retrievedAt.slice(0, 10)) ? retrievedAt : null;
   try {
@@ -195,25 +193,32 @@ export function parseBlsCoreSources(
       }
 
       const periods = Array.from(byMonth.keys()).sort();
-      const contiguous = periods.every((period, index) => {
-        if (index === 0) return true;
-        const [previousYear, previousMonth] = periods[index - 1].split("-").map(Number);
+      const serial = (period: string) => {
         const [year, month] = period.split("-").map(Number);
-        return year * 12 + month === previousYear * 12 + previousMonth + 1;
-      });
-      if (!contiguous) {
-        return coreResult(definition.sourceId, definition.identifier, retrievedAt, "FAILED", "FAILED", "FAILED", [], "BLS history contains a missing monthly period.");
-      }
+        return year * 12 + month;
+      };
+      const fromSerial = (value: number) => {
+        const year = Math.floor((value - 1) / 12);
+        const month = value - year * 12;
+        return `${year}-${String(month).padStart(2, "0")}`;
+      };
+      const expectedPeriods = periods.length
+        ? Array.from({ length: serial(periods.at(-1)!) - serial(periods[0]) + 1 }, (_, index) => fromSerial(serial(periods[0]) + index))
+        : [];
+      const missingPeriods = expectedPeriods
+        .filter((period) => !byMonth.has(period) || byMonth.get(period) === null)
+        .map((period) => `${period}-01`);
       const validPeriods = periods.filter((period) => byMonth.get(period) !== null);
-      const unavailablePeriodIndex = periods.map((period) => byMonth.get(period) === null).lastIndexOf(true);
-      const usablePeriods = options.preservePartialHistory
-        ? validPeriods
-        : periods.slice(unavailablePeriodIndex + 1);
-      if (validPeriods.length < minimumMonthlyHistory || usablePeriods.length === 0) {
-        return coreResult(definition.sourceId, definition.identifier, retrievedAt, "MISSING", "PARTIAL", "PARTIAL", [], "BLS history is shorter than the registered minimum.");
+      if (validPeriods.length === 0) {
+        return coreResult(definition.sourceId, definition.identifier, retrievedAt, "MISSING", "PARTIAL", "PARTIAL", [], "BLS returned no valid monthly observations.", missingPeriods);
       }
 
-      const observations = usablePeriods.map((period): CoreSourceObservation => ({
+      const validPeriodSet = new Set(validPeriods);
+      const historyPairCount = validPeriods.filter((period) => {
+        const [year, month] = period.split("-").map(Number);
+        return validPeriodSet.has(`${year - 1}-${String(month).padStart(2, "0")}`);
+      }).length;
+      const observations = validPeriods.map((period): CoreSourceObservation => ({
         sourceId: definition.sourceId,
         identifier: definition.identifier,
         value: byMonth.get(period)!,
@@ -227,20 +232,19 @@ export function parseBlsCoreSources(
         version: null,
         vintage: null,
       }));
-      const hasUnavailablePeriods = unavailablePeriodIndex >= 0;
+      const incompleteHistory = missingPeriods.length > 0 || historyPairCount < 120;
       return coreResult(
         definition.sourceId,
         definition.identifier,
         retrievedAt,
         "AVAILABLE",
         "VERIFIED",
-        hasUnavailablePeriods ? "PARTIAL" : "VERIFIED",
+        incompleteHistory ? "PARTIAL" : "VERIFIED",
         observations,
-        hasUnavailablePeriods
-          ? options.preservePartialHistory
-            ? "BLS unavailable-month markers are omitted while other valid periods remain available for historical evaluation."
-            : "Only the contiguous run after the most recent BLS unavailable-month marker is exposed."
+        incompleteHistory
+          ? `BLS history has ${historyPairCount} valid YoY pairs against the 120-month reference-history target${missingPeriods.length ? `; ${missingPeriods.length} month(s) are explicitly unavailable` : ""}.`
           : null,
+        missingPeriods,
       );
     });
   } catch {
@@ -250,7 +254,6 @@ export function parseBlsCoreSources(
 
 export async function fetchBlsCoreSources(options: AdapterOptions & {
   historyStartYear?: number;
-  preservePartialHistory?: boolean;
 } = {}): Promise<CoreObservationSeriesResult[]> {
   const fetchImpl = options.fetchImpl ?? fetch;
   const currentYear = (options.now ?? new Date()).getUTCFullYear();
@@ -293,7 +296,7 @@ export async function fetchBlsCoreSources(options: AdapterOptions & {
     return parseBlsCoreSources({
       status: "REQUEST_SUCCEEDED",
       Results: { series: Array.from(seriesById.entries()).map(([seriesID, data]) => ({ seriesID, data })) },
-    }, retrievedAt, { preservePartialHistory: options.preservePartialHistory });
+    }, retrievedAt);
   } catch {
     return blsCoreFailures(null, "FAILED", "The BLS core history is temporarily unavailable.");
   }

@@ -308,7 +308,7 @@ describe("official anchor source adapters", () => {
     expect(unemployment.observations.at(-1)).toMatchObject({ unit: "percent", seasonalBasis: "SA" });
   });
 
-  it("withholds BLS data on wrong identifiers, duplicate months, and unexpectedly truncated history", () => {
+  it("withholds BLS data on wrong identifiers and duplicate months while allowing partial history", () => {
     const wrongId = makeBlsPayload() as { Results: { series: Array<{ seriesID: string }> } };
     wrongId.Results.series[0].seriesID = "CUUR0000SA1";
     const wrongResult = parseBlsCoreSources(wrongId, retrievedAt) as SeriesResult[];
@@ -321,8 +321,17 @@ describe("official anchor source adapters", () => {
       observations: [],
     });
 
-    const truncated = parseBlsCoreSources(makeBlsPayload(30), retrievedAt) as SeriesResult[];
-    expect(byId(truncated, "CUUR0000SA0")).toMatchObject({ state: "MISSING", historyStatus: "PARTIAL", observations: [] });
+    const shorterHistory = parseBlsCoreSources(makeBlsPayload(30), retrievedAt) as SeriesResult[];
+    const shortCpi = byId(shorterHistory, "CUUR0000SA0L1E");
+    expect(shortCpi).toMatchObject({ state: "AVAILABLE", parserStatus: "VERIFIED", historyStatus: "PARTIAL" });
+    expect(shortCpi.observations).toHaveLength(30);
+    expect(transformYoY(shortCpi, {
+      sourceId: "bls-cpi",
+      identifier: "CUUR0000SA0L1E",
+      unit: "index (1982-84=100)",
+      seasonalBasis: "NSA",
+      cadence: "monthly",
+    }, CORE_SCORE_ANCHORS.inflation).historyPoints).toBe(18);
 
     expect(parseBlsCoreSources("<html>rate limited</html>", retrievedAt)[0]).toMatchObject({
       state: "FAILED",
@@ -331,7 +340,7 @@ describe("official anchor source adapters", () => {
     });
   });
 
-  it("preserves only the contiguous BLS history after an explicit unavailable-month marker", () => {
+  it("preserves both sides of an explicit BLS CPI gap without interpolation", () => {
     const payload = makeBlsPayload() as { Results: { series: Array<{ data: Array<{ year: string; period: string; value: string }> }> } };
     for (const series of payload.Results.series) {
       const unavailableMonth = series.data.find((row) => row.year === "2025" && row.period === "M10");
@@ -342,17 +351,28 @@ describe("official anchor source adapters", () => {
     const coreCpi = byId(results, "CUUR0000SA0L1E");
     const unemployment = byId(results, "LNS14000000");
 
-    expect(coreCpi).toMatchObject({ state: "AVAILABLE", parserStatus: "VERIFIED", historyStatus: "PARTIAL" });
-    expect(coreCpi.observations[0].observedAt).toBe("2025-11-01");
-    expect(coreCpi.observations).toHaveLength(10);
+    expect(coreCpi).toMatchObject({
+      state: "AVAILABLE",
+      parserStatus: "VERIFIED",
+      historyStatus: "PARTIAL",
+      missingPeriods: ["2025-10-01"],
+    });
+    expect(coreCpi.observations[0].observedAt).toBe("2015-01-01");
+    expect(coreCpi.observations).toHaveLength(139);
     expect(coreCpi.observations.some(({ observedAt }) => observedAt === "2025-10-01")).toBe(false);
+    expect(coreCpi.observations.some(({ observedAt }) => observedAt === "2025-09-01")).toBe(true);
+    expect(coreCpi.observations.some(({ observedAt }) => observedAt === "2025-11-01")).toBe(true);
     expect(unemployment).toMatchObject({ state: "AVAILABLE", parserStatus: "VERIFIED", historyStatus: "PARTIAL" });
-    expect(unemployment.observations[0].observedAt).toBe("2025-11-01");
+    expect(unemployment.observations[0].observedAt).toBe("2015-01-01");
 
     const cpiExpectation = { sourceId: "bls-cpi", identifier: "CUUR0000SA0L1E", unit: "index (1982-84=100)", seasonalBasis: "NSA", cadence: "monthly" } as const;
-    expect(transformYoY(coreCpi, cpiExpectation, CORE_SCORE_ANCHORS.inflation).score).toBeNull();
+    const cpiYoY = transformYoY(coreCpi, cpiExpectation, CORE_SCORE_ANCHORS.inflation);
+    expect(cpiYoY.score).not.toBeNull();
+    expect(cpiYoY.observedAt).toBe("2026-08-01");
+    expect(cpiYoY.historyPoints).toBe(127);
+    expect(cpiYoY.observations.map(({ observedAt }) => observedAt)).toEqual(["2025-08-01", "2026-08-01"]);
     const saCore = byId(results, "CUSR0000SA0L1E");
-    expect(transformAnnualized3m(saCore, { ...cpiExpectation, identifier: "CUSR0000SA0L1E", seasonalBasis: "SA" }, CORE_SCORE_ANCHORS.inflation).score).not.toBeNull();
+    expect(transformAnnualized3m(saCore, { ...cpiExpectation, identifier: "CUSR0000SA0L1E", seasonalBasis: "SA" }, CORE_SCORE_ANCHORS.inflation).score).toBeNull();
     expect(transformUnemploymentGap(unemployment, {
       sourceId: "bls-labor",
       identifier: "LNS14000000",
@@ -362,20 +382,21 @@ describe("official anchor source adapters", () => {
     }, CORE_SCORE_ANCHORS.unemploymentGap).score).toBeNull();
   });
 
-  it("retains valid pre-gap BLS observations when preparing diagnostic history", () => {
+  it("retains valid pre-gap BLS observations in diagnostic history without filling the gap", () => {
     const payload = makeBlsPayload() as { Results: { series: Array<{ data: Array<{ year: string; period: string; value: string }> }> } };
     for (const series of payload.Results.series) {
       const unavailableMonth = series.data.find((row) => row.year === "2025" && row.period === "M10");
       if (unavailableMonth) unavailableMonth.value = "-";
     }
 
-    const results = parseBlsCoreSources(payload, retrievedAt, { preservePartialHistory: true }) as SeriesResult[];
+    const results = parseBlsCoreSources(payload, retrievedAt) as SeriesResult[];
     const coreCpi = byId(results, "CUUR0000SA0L1E");
 
     expect(coreCpi).toMatchObject({ state: "AVAILABLE", parserStatus: "VERIFIED", historyStatus: "PARTIAL" });
     expect(coreCpi.observations).toHaveLength(139);
     expect(coreCpi.observations[0].observedAt).toBe("2015-01-01");
     expect(coreCpi.observations.at(-1)?.observedAt).toBe("2026-08-01");
+    expect(coreCpi.missingPeriods).toEqual(["2025-10-01"]);
     expect(coreCpi.observations.some(({ observedAt }) => observedAt === "2025-10-01")).toBe(false);
   });
 

@@ -50,8 +50,12 @@ export interface DiagnosticCalendar {
 
 export interface DiagnosticInspectionMonth extends DiagnosticInspectionWindow {
   snapshotCount: number;
+  evaluatedSnapshotCount: number;
+  notEvaluatedSnapshotCount: number;
   evaluated: boolean;
 }
+
+export type DiagnosticEvaluationStatus = "EVALUATED" | "NOT_EVALUATED";
 
 export interface DiagnosticFactorSnapshot {
   score: number | null;
@@ -67,6 +71,8 @@ export interface DiagnosticFactorSnapshot {
 export interface DiagnosticSnapshot {
   period: string;
   asOf: string;
+  evaluationStatus: DiagnosticEvaluationStatus;
+  evaluationReason: string | null;
   assessmentStatus: AssessmentStatus;
   regime: Regime | null;
   dataQuality: number | null;
@@ -319,7 +325,17 @@ export function createDiagnosticSnapshot(
   core: CoreFactorsResult,
   assessment: RegimeAssessment,
   sourceGaps: string[],
+  evaluation: { status?: DiagnosticEvaluationStatus; reason?: string | null } = {},
 ): DiagnosticSnapshot {
+  const evaluationStatus = evaluation.status ?? (assessment.assessmentStatus === "INSUFFICIENT_DATA" ? "NOT_EVALUATED" : "EVALUATED");
+  const notEvaluated = evaluationStatus === "NOT_EVALUATED";
+  const ruleDiagnostics = notEvaluated
+    ? Object.fromEntries(Object.keys(assessment.ruleDiagnostics).map((regime) => [regime, {
+      result: "UNKNOWN",
+      support: 0,
+      failedOrUnknownGates: ["snapshot_not_evaluated"],
+    }])) as Record<Regime, RuleDiagnostic>
+    : assessment.ruleDiagnostics;
   const factors = Object.fromEntries(FACTOR_KEYS.map((key) => {
     const factor = core.factors[key];
     return [key, {
@@ -336,12 +352,14 @@ export function createDiagnosticSnapshot(
   return {
     period,
     asOf: monthEnd(period),
-    assessmentStatus: assessment.assessmentStatus,
-    regime: assessment.regime,
+    evaluationStatus,
+    evaluationReason: notEvaluated ? evaluation.reason ?? "Required inputs were unavailable for this monthly snapshot." : null,
+    assessmentStatus: notEvaluated ? "INSUFFICIENT_DATA" : assessment.assessmentStatus,
+    regime: notEvaluated ? null : assessment.regime,
     dataQuality: assessment.dataQuality,
     regimeClarity: assessment.regimeClarity,
     factors,
-    ruleDiagnostics: assessment.ruleDiagnostics,
+    ruleDiagnostics,
     tensions: assessment.tensions,
     leadingDirection: assessment.leadingDirection,
     inflationDirection: assessment.inflationDirection,
@@ -484,6 +502,23 @@ function qualityOfPeriod(core: CoreFactorsResult, assessment: RegimeAssessment):
   return gaps;
 }
 
+function cpiYoYWindowGaps(series: CoreObservationSeriesResult[], period: string): string[] {
+  const matches = series.filter(({ sourceId, identifier }) => sourceId === "bls-cpi" && identifier === "CUUR0000SA0L1E");
+  if (matches.length !== 1) {
+    return [`${period}: CPI core YoY window is NOT EVALUATED because its approved BLS series is missing or ambiguous.`];
+  }
+
+  const current = `${period}-01`;
+  const [year, month] = period.split("-").map(Number);
+  const prior = `${year - 1}-${String(month).padStart(2, "0")}-01`;
+  const observations = new Set(matches[0].observations.map(({ observedAt }) => observedAt));
+  const missing = new Set(matches[0].missingPeriods ?? []);
+  const absentEndpoints = [current, prior].filter((endpoint) => missing.has(endpoint) || !observations.has(endpoint));
+  return absentEndpoints.length
+    ? [`${period}: CPI core YoY window is NOT EVALUATED; exact index endpoint(s) unavailable: ${absentEndpoints.join(", ")}.`]
+    : [];
+}
+
 function emptySummary(): RegimeHistorySummary {
   return { episodes: [], namedChangesByYear: {}, flags: [] };
 }
@@ -508,7 +543,14 @@ function result(
     snapshotCount: status === "COMPLETE"
       ? snapshots.filter(({ period }) => period >= window.startMonth && period <= window.endMonth).length
       : 0,
-    evaluated: status === "COMPLETE",
+    evaluatedSnapshotCount: status === "COMPLETE"
+      ? snapshots.filter(({ period, evaluationStatus }) => period >= window.startMonth && period <= window.endMonth && evaluationStatus === "EVALUATED").length
+      : 0,
+    notEvaluatedSnapshotCount: status === "COMPLETE"
+      ? snapshots.filter(({ period, evaluationStatus }) => period >= window.startMonth && period <= window.endMonth && evaluationStatus === "NOT_EVALUATED").length
+      : 0,
+    evaluated: status === "COMPLETE" && snapshots.some(({ period, evaluationStatus }) =>
+      period >= window.startMonth && period <= window.endMonth && evaluationStatus === "EVALUATED"),
   }));
   return {
     label: CURRENT_REVISED_HISTORY_LABEL,
@@ -534,34 +576,35 @@ export function runCurrentRevisedHistoryDiagnostic(options: DiagnosticOptions): 
   }
 
   const periods = [...calendar.warmupMonths, ...calendar.snapshotMonths];
-  const coreHistory: CoreFactorsResult[] = [];
-  const assessmentHistory: RegimeAssessment[] = [];
+  const coreHistory: Array<CoreFactorsResult | null> = [];
+  const assessmentHistory: Array<RegimeAssessment | null> = [];
   const snapshots: DiagnosticSnapshot[] = [];
   for (const period of periods) {
     const core = buildCoreFactors(options.series, monthEnd(period), { mode: EVALUATION_MODE });
     const inputs = createRegimeInputsFromCoreFactors(core);
     const previous = coreHistory.at(-1) ?? null;
-    const threeMonthsPrior = coreHistory.length >= 3 ? coreHistory.at(-3)! : null;
+    const threeMonthsPrior = coreHistory.length >= 3 ? coreHistory.at(-3) ?? null : null;
     inputs.sourceMomentum = {
       growth: commonFactorMomentum(previous, core, "growth"),
       labor: commonFactorMomentum(previous, core, "labor"),
       credit: commonFactorMomentum(previous, core, "creditConditions"),
     };
     setHistoricalComparisons(inputs, core, threeMonthsPrior);
-    const previousAssessment = assessmentHistory.at(-1);
-    inputs.priorTensionComparison = comparePriorTensions(previous, previousAssessment ?? null, core);
+    const previousAssessment = assessmentHistory.at(-1) ?? null;
+    inputs.priorTensionComparison = comparePriorTensions(previous, previousAssessment, core);
     const assessment = evaluateRegime(inputs);
+    const missing = [...cpiYoYWindowGaps(options.series, period), ...qualityOfPeriod(core, assessment)];
+    const evaluationStatus = missing.length ? "NOT_EVALUATED" : "EVALUATED";
 
     if (calendar.snapshotMonths.includes(period)) {
-      const missing = qualityOfPeriod(core, assessment);
-      if (missing.length) {
-        const blockers = missing.map((gap) => `${period}: ${gap}`);
-        return result("NOT_RUN", calendar, blockers, [...metadataGaps, ...blockers], []);
-      }
-      snapshots.push(createDiagnosticSnapshot(period, core, assessment, snapshotSourceGaps(core)));
+      const snapshotGaps = [...snapshotSourceGaps(core), ...missing];
+      snapshots.push(createDiagnosticSnapshot(period, core, assessment, snapshotGaps, {
+        status: evaluationStatus,
+        reason: missing.join(" ") || null,
+      }));
     }
-    coreHistory.push(core);
-    assessmentHistory.push(assessment);
+    coreHistory.push(evaluationStatus === "EVALUATED" ? core : null);
+    assessmentHistory.push(evaluationStatus === "EVALUATED" ? assessment : null);
   }
 
   return result("COMPLETE", calendar, [], [...metadataGaps, ...snapshots.flatMap(({ sourceGaps }) => sourceGaps)], snapshots);
@@ -623,7 +666,7 @@ export function renderDiagnosticMarkdown(diagnostic: CurrentRevisedHistoryDiagno
   lines.push(
     "## Episode Review",
     "",
-    ...diagnostic.inspectionWindows.map((window) => `- ${window.label} (${window.startMonth} to ${window.endMonth}): ${window.snapshotCount} monthly snapshots included; manual review still required.`),
+    ...diagnostic.inspectionWindows.map((window) => `- ${window.label} (${window.startMonth} to ${window.endMonth}): ${window.evaluatedSnapshotCount}/${window.snapshotCount} snapshots evaluated; ${window.notEvaluatedSnapshotCount} NOT EVALUATED; manual review still required.`),
     "",
     "## Regime Episodes",
     "",

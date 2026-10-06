@@ -18,7 +18,6 @@ import {
 
 export interface CoreHistoryOptions extends AdapterOptions {
   historyStartYear?: number;
-  preservePartialHistory?: boolean;
 }
 
 class UncacheableCoreSourceResults extends Error {

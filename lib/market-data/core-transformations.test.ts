@@ -112,6 +112,60 @@ describe("approved core transforms", () => {
     expect(transformYoY(saSeries, monthlyIndex, CORE_SCORE_ANCHORS.inflation).value).toBeNull();
   });
 
+  it("matches the exact year-earlier calendar month across an unrelated missing CPI month", () => {
+    const dates = monthlyDates(140, 2015).filter((date) => date !== "2025-10-01");
+    const values = dates.map((_, index) => 100 + index / 10);
+    const input = series("test-index", "IDX", values, dates, "index", "NSA");
+    input.historyStatus = "PARTIAL";
+
+    const result = transformYoY(input, monthlyIndex, CORE_SCORE_ANCHORS.inflation);
+    const current = input.observations.find(({ observedAt }) => observedAt === "2026-08-01")!;
+    const prior = input.observations.find(({ observedAt }) => observedAt === "2025-08-01")!;
+
+    expect(result.value).toBeCloseTo(100 * (current.value / prior.value - 1), 10);
+    expect(result.observedAt).toBe("2026-08-01");
+    expect(result.score).not.toBeNull();
+    expect(result.historyPoints).toBe(127);
+    expect(result.historyYears).toBeCloseTo(127 / 12, 10);
+  });
+
+  it("does not fall back to an older CPI observation when the latest month lacks its year-earlier endpoint", () => {
+    const dates = monthlyDates(142, 2015).filter((date) => date !== "2025-10-01");
+    const input = series("test-index", "IDX", dates.map((_, index) => 100 + index / 10), dates, "index", "NSA");
+    input.historyStatus = "PARTIAL";
+
+    const result = transformYoY(input, monthlyIndex, CORE_SCORE_ANCHORS.inflation);
+
+    expect(result.value).toBeNull();
+    expect(result.score).toBeNull();
+    expect(result.reason).toContain("exact current-month or year-earlier");
+  });
+
+  it("fails closed when the latest known CPI month is explicitly unavailable", () => {
+    const dates = monthlyDates(12, 2024, 10);
+    const input = series("test-index", "IDX", Array(12).fill(100), dates, "index", "NSA");
+    input.missingPeriods = ["2025-10-01"];
+
+    const result = transformYoY(input, monthlyIndex, CORE_SCORE_ANCHORS.inflation);
+
+    expect(result.value).toBeNull();
+    expect(result.observedAt).toBeNull();
+    expect(result.reason).toContain("exact current-month or year-earlier");
+  });
+
+  it("keeps a current YoY eligible with partial history while reporting only valid transformed pairs", () => {
+    const dates = ["2025-08-01", "2026-08-01"];
+    const input = series("test-index", "IDX", [200, 206], dates, "index", "NSA");
+    input.historyStatus = "PARTIAL";
+
+    const result = transformYoY(input, monthlyIndex, CORE_SCORE_ANCHORS.inflation);
+
+    expect(result.value).toBeCloseTo(3, 10);
+    expect(result.score).not.toBeNull();
+    expect(result.historyPoints).toBe(1);
+    expect(result.historyYears).toBeCloseTo(1 / 12, 10);
+  });
+
   it("uses six consecutive monthly levels for g3 of adjacent three-month means", () => {
     const input = series("test-index", "IDX", [100, 100, 100, 110, 110, 110], monthlyDates(6), "index", "SA");
     const result = transformG3(input, { ...monthlyIndex, seasonalBasis: "SA" }, [[-4, 100], [0, 65], [2, 30], [5, 0]]);

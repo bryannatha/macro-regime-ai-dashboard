@@ -4,7 +4,7 @@ import type { Regime, RegimeAssessment, RegimeFactorKey, RegimeSensitivity } fro
 import { buildCoreFactors } from "./core-factors";
 import { createRegimeInputsFromCoreFactors } from "./regime-inputs";
 import { getSourceRegistry } from "./source-registry";
-import type { CoreFactorsResult } from "./types";
+import type { CoreFactorsResult, CoreObservationSeriesResult } from "./types";
 import {
   buildDiagnosticCalendar,
   comparePriorTensions,
@@ -57,6 +57,39 @@ function classifiableCore(growthFamilyOffset = 0): CoreFactorsResult {
     factor.families = factor.families.map((family) => ({ ...family, eligible: eligibleKeys.has(family.key) }));
   }
   return core;
+}
+
+function cpiHistoryWithOctoberGap(): CoreObservationSeriesResult {
+  const months = Array.from({ length: 14 }, (_, index) => {
+    const serial = 2024 * 12 + 10 + index;
+    const year = Math.floor((serial - 1) / 12);
+    const month = serial - year * 12;
+    return `${year}-${String(month).padStart(2, "0")}-01`;
+  }).filter((period) => period !== "2025-10-01");
+  return {
+    sourceId: "bls-cpi",
+    identifier: "CUUR0000SA0L1E",
+    state: "AVAILABLE",
+    observations: months.map((observedAt, index) => ({
+      sourceId: "bls-cpi",
+      identifier: "CUUR0000SA0L1E",
+      value: 300 + index,
+      unit: "index (1982-84=100)",
+      seasonalBasis: "NSA",
+      observedAt,
+      releasedAt: null,
+      retrievedAt: "2026-10-04T12:00:00.000Z",
+      firstSeenAt: null,
+      releaseDateQuality: 0,
+      version: null,
+      vintage: null,
+    })),
+    parserStatus: "VERIFIED",
+    historyStatus: "PARTIAL",
+    retrievedAt: "2026-10-04T12:00:00.000Z",
+    reason: null,
+    missingPeriods: ["2025-10-01"],
+  };
 }
 
 function classifiableAssessment(status: RegimeAssessment["assessmentStatus"] = "NORMAL"): Pick<
@@ -161,24 +194,38 @@ describe("current/revised-history diagnostic", () => {
   it("retains factor bounds, readiness, rule diagnostics, tensions, directions, risk, sensitivity, and source gaps", () => {
     const core = buildCoreFactors([], "2020-01-31T23:59:59.999Z", { mode: "current-revised-history" });
     const assessment = evaluateRegime(createRegimeInputsFromCoreFactors(core));
-    const snapshot = createDiagnosticSnapshot("2020-01", core, assessment, ["treasury-real-yield: blocked"]);
+    const staleMixedAssessment = {
+      ...assessment,
+      assessmentStatus: "PROVISIONAL" as const,
+      regime: "MIXED" as const,
+      ruleDiagnostics: {
+        ...assessment.ruleDiagnostics,
+        MIXED: { ...assessment.ruleDiagnostics.MIXED, result: "TRUE" as const },
+      },
+    };
+    const snapshot = createDiagnosticSnapshot("2020-01", core, staleMixedAssessment, ["CPI endpoint unavailable"], {
+      status: "NOT_EVALUATED",
+      reason: "The CPI YoY endpoint was missing.",
+    });
 
     expect(snapshot).toMatchObject({
       period: "2020-01",
+      evaluationStatus: "NOT_EVALUATED",
       assessmentStatus: "INSUFFICIENT_DATA",
       regime: null,
+      evaluationReason: "The CPI YoY endpoint was missing.",
+      ruleDiagnostics: { MIXED: { result: "UNKNOWN" } },
       factors: {
         growth: { score: null, coverage: 0, eligibleFamilies: 0, configuredFamilies: 5, status: "WITHHELD" },
       },
       dataQuality: assessment.dataQuality,
       regimeClarity: assessment.regimeClarity,
-      ruleDiagnostics: assessment.ruleDiagnostics,
       tensions: assessment.tensions,
       leadingDirection: assessment.leadingDirection,
       inflationDirection: assessment.inflationDirection,
       transitionRisk: assessment.transitionRisk,
       thresholdSensitivity: assessment.sensitivity,
-      sourceGaps: ["treasury-real-yield: blocked"],
+      sourceGaps: ["CPI endpoint unavailable"],
     });
   });
 
@@ -203,7 +250,7 @@ describe("current/revised-history diagnostic", () => {
     expect(markdown).toContain("No monthly snapshots were generated");
   });
 
-  it("rejects missing source history after the admission gate and never emits partial snapshots", () => {
+  it("marks data-insufficient months NOT EVALUATED and continues the diagnostic calendar", () => {
     const sourceRegistry = getSourceRegistry().map((source) => source.id === "treasury-real-yield"
       ? { ...source, sourceHealth: "AVAILABLE" as const, reuseStatus: "CLEARED" as const }
       : source);
@@ -214,9 +261,36 @@ describe("current/revised-history diagnostic", () => {
       endMonth: "2015-02",
     });
 
-    expect(result.status).toBe("NOT_RUN");
-    expect(result.snapshots).toEqual([]);
-    expect(result.blockers.some((blocker) => blocker.includes("2015-01") && blocker.includes("inflation"))).toBe(true);
+    expect(result.status).toBe("COMPLETE");
+    expect(result.blockers).toEqual([]);
+    expect(result.snapshots).toHaveLength(2);
+    expect(result.snapshots.map(({ evaluationStatus }) => evaluationStatus)).toEqual(["NOT_EVALUATED", "NOT_EVALUATED"]);
+    expect(result.snapshots.every(({ assessmentStatus, regime }) => assessmentStatus === "INSUFFICIENT_DATA" && regime === null)).toBe(true);
+    expect(result.snapshots.some(({ sourceGaps }) => sourceGaps.some((gap) => gap.includes("2015-01") && gap.includes("CPI")))).toBe(true);
+    expect(result.summary.episodes).toEqual([]);
+  });
+
+  it("marks only the CPI-gap window with its missing endpoint and continues to later snapshots", () => {
+    const sourceRegistry = getSourceRegistry().map((source) => source.id === "treasury-real-yield"
+      ? { ...source, sourceHealth: "AVAILABLE" as const, reuseStatus: "CLEARED" as const }
+      : source);
+    const result = runCurrentRevisedHistoryDiagnostic({
+      sourceRegistry,
+      series: [cpiHistoryWithOctoberGap()],
+      startMonth: "2025-10",
+      endMonth: "2025-11",
+    });
+    const october = result.snapshots[0];
+    const november = result.snapshots[1];
+
+    expect(result.status).toBe("COMPLETE");
+    expect(result.snapshots).toHaveLength(2);
+    expect(october.evaluationStatus).toBe("NOT_EVALUATED");
+    expect(october.evaluationReason).toContain("exact index endpoint(s) unavailable: 2025-10-01");
+    expect(november.evaluationReason).not.toContain("CPI core YoY window is NOT EVALUATED");
+    expect(october.regime).toBeNull();
+    expect(november.regime).toBeNull();
+    expect(result.summary.episodes).toEqual([]);
   });
 
   it("does not invoke external source fetches before an unresolved source gate", async () => {

@@ -71,6 +71,7 @@ function periodIndex(observation: CoreSourceObservation, cadence: SeriesExpectat
 function validateSeries(
   series: CoreObservationSeriesResult | null | undefined,
   expectation: SeriesExpectation,
+  requireContinuity = true,
 ): ValidatedSeries | null {
   if (!series || series.state !== "AVAILABLE" || series.parserStatus !== "VERIFIED" ||
       series.historyStatus === "UNVERIFIED" || series.historyStatus === "FAILED" ||
@@ -88,7 +89,8 @@ function validateSeries(
   const numericIndexes = indexes as number[];
   for (let index = 1; index < numericIndexes.length; index += 1) {
     const step = expectation.cadence === "weekly" ? 7 : expectation.cadence === "quarterly" ? 3 : 1;
-    if (numericIndexes[index] !== numericIndexes[index - 1] + step) return null;
+    const distance = numericIndexes[index] - numericIndexes[index - 1];
+    if (distance <= 0 || (requireContinuity && distance !== step)) return null;
   }
   return { observations, points: observations.map(({ value }) => value) };
 }
@@ -142,14 +144,39 @@ export function transformYoY(
   expectation: SeriesExpectation,
   anchors: StressAnchors,
 ): CoreTransformResult {
-  const validated = validateSeries(series, expectation);
+  const validated = validateSeries(series, expectation, false);
   if (!validated) return unavailable("The source, identifier, units, seasonal basis, or period continuity did not match the approved series.", "percent YoY");
   const { observations, points } = validated;
-  if (expectation.cadence !== "monthly" || points.length < 13 || points.some((value) => value <= 0)) return missingHistory("percent YoY");
-  const latest = points.length - 1;
-  const prior = latest - 12;
-  const value = 100 * (points[latest] / points[prior] - 1);
-  return result(value, anchors, "percent YoY", [observations[prior], observations[latest]], points.length - 12, (points.length - 12) / 12);
+  if (expectation.cadence !== "monthly" || points.some((value) => value <= 0)) return missingHistory("percent YoY");
+
+  const observationIndexes = observations.map((observation) => periodIndex(observation, "monthly"));
+  if (observationIndexes.some((index) => index === null)) return unavailable("The approved monthly observation periods are invalid.", "percent YoY");
+  const observedByMonth = new Map((observationIndexes as number[]).map((index, position) => [index, observations[position]]));
+  const missingPeriods = series?.missingPeriods ?? [];
+  const missingIndexes = missingPeriods.map((period) => {
+    const match = /^(\d{4})-(\d{2})-01$/.exec(period);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const date = new Date(Date.UTC(year, month - 1, 1)).toISOString().slice(0, 10);
+    return date === period && month >= 1 && month <= 12 ? year * 12 + month : null;
+  });
+  if (missingIndexes.some((index) => index === null) || new Set(missingIndexes).size !== missingIndexes.length ||
+      missingIndexes.some((index) => observedByMonth.has(index!))) {
+    return unavailable("The source contains invalid or conflicting missing-month metadata.", "percent YoY");
+  }
+
+  const targetIndex = Math.max(...(observationIndexes as number[]), ...(missingIndexes as number[]));
+  const current = observedByMonth.get(targetIndex);
+  const prior = observedByMonth.get(targetIndex - 12);
+  if (!current || !prior || current.value <= 0 || prior.value <= 0) {
+    return unavailable("The exact current-month or year-earlier observation required for YoY is missing.", "percent YoY");
+  }
+
+  const validPairCount = (observationIndexes as number[]).reduce((count, index) =>
+    count + (observedByMonth.has(index - 12) ? 1 : 0), 0);
+  const value = 100 * (current.value / prior.value - 1);
+  return result(value, anchors, "percent YoY", [prior, current], validPairCount, validPairCount / 12);
 }
 
 export function transformAnnualized3m(

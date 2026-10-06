@@ -90,9 +90,13 @@ function validAtAsOf(
     (observation.releasedAt !== null && (!Number.isFinite(Date.parse(observation.releasedAt)) ||
       mode === "point-in-time" && observation.releasedAt > asOf.slice(0, 10)))
   )) return null;
-  if (mode === "point-in-time") return series;
-  return {
+  const historyThroughAsOf = {
     ...series,
+    missingPeriods: series.missingPeriods?.filter((period) => period <= asOf.slice(0, 10)),
+  };
+  if (mode === "point-in-time") return historyThroughAsOf;
+  return {
+    ...historyThroughAsOf,
     observations: series.observations.filter(({ observedAt }) => observedAt <= asOf.slice(0, 10)),
   };
 }

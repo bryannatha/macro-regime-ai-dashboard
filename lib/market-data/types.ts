@@ -55,6 +55,7 @@ export interface CoreObservationSeriesResult {
   historyStatus: SourceHistoryStatus;
   retrievedAt: string | null;
   reason: string | null;
+  missingPeriods?: string[];
   eligibilityBlockReason?: string | null;
 }
 

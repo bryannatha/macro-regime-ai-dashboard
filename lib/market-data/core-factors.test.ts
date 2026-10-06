@@ -138,6 +138,39 @@ describe("approved anchor family aggregation", () => {
     expect(buildCoreFactors(sourceFixture(), "2020-01-31T23:59:59.999Z").factors.inflation.coverage).toBe(0);
   });
 
+  it("keeps CPI current eligibility separate from partial transformed-history quality", () => {
+    const completeSources = sourceFixture();
+    const incompleteCpiHistory = completeSources.map((source) => {
+      if (source.sourceId !== "bls-cpi" || !["CUUR0000SA0L1E", "CUUR0000SA0"].includes(source.identifier)) return source;
+      return {
+        ...source,
+        observations: source.observations.filter(({ observedAt }) => observedAt !== "2025-10-01"),
+        missingPeriods: ["2025-10-01"],
+        historyStatus: "PARTIAL" as const,
+      };
+    });
+    const full = buildCoreFactors(completeSources, asOf);
+    const partial = buildCoreFactors(incompleteCpiHistory, asOf);
+    const cpiFamily = partial.factors.inflation.families.find(({ key }) => key === "cpi")!;
+    const cpiCore = cpiFamily.slots.find(({ key }) => key === "coreYoY")!;
+
+    expect(cpiCore).toMatchObject({ eligible: true, observedAt: "2026-08-01" });
+    expect(cpiCore.historyPoints).toBe(127);
+    expect(cpiFamily).toMatchObject({ eligible: true, coverage: 1 });
+    expect(partial.factors.inflation).toMatchObject({ coverage: 1, eligibleFamilies: 2 });
+
+    const shortPartialCpi = incompleteCpiHistory.map((source) => {
+      if (source.sourceId !== "bls-cpi" || !["CUUR0000SA0L1E", "CUUR0000SA0"].includes(source.identifier)) return source;
+      return { ...source, observations: source.observations.slice(-24) };
+    });
+    const shortPartial = buildCoreFactors(shortPartialCpi, asOf);
+    const shortCoreSlot = shortPartial.factors.inflation.families.find(({ key }) => key === "cpi")!.slots.find(({ key }) => key === "coreYoY")!;
+    expect(shortCoreSlot).toMatchObject({ eligible: true, historyPoints: 12 });
+    expect(shortCoreSlot.quality.history).toBeCloseTo(12 / 120, 10);
+    expect(evaluateRegime(createRegimeInputsFromCoreFactors(shortPartial)).dataQuality)
+      .toBeLessThan(evaluateRegime(createRegimeInputsFromCoreFactors(full)).dataQuality!);
+  });
+
   it("retains 100% Labor coverage with claims and exactly 75% when claims alone are absent", () => {
     const sources = sourceFixture();
     const complete = buildCoreFactors(sources, asOf).factors.labor;
