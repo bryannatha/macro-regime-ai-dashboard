@@ -31,6 +31,7 @@ export const REGIME_LABELS: Record<Regime, string> = {
 
 const CORE = REGIMES.filter((regime) => regime !== "MIXED") as Exclude<Regime, "MIXED">[];
 const ANCHORS = ["inflation", "growth", "labor", "policyRates"] as const;
+const SUPPORT_KEYS = ["creditConditions", "liquidityProxy"] as const;
 const FACTOR_KEYS = ["inflation", "growth", "labor", "policyRates", "creditConditions", "liquidityProxy"] as const;
 const BASE_THRESHOLDS = {
   iContained: 45,
@@ -727,8 +728,10 @@ export function evaluateRegime(inputs: RegimeInputs): RegimeAssessment {
   const cap = sensitivity.classification === "FRAGILE" ? 49
     : sensitivity.classification === "MODERATELY_SENSITIVE" ? 69 : 100;
   const regimeClarity = Math.min(cap, Math.round(clamp(rawClarity)));
-  const supportingCount = FACTOR_KEYS.filter((key) => !ANCHORS.includes(key as (typeof ANCHORS)[number]) && isClassifiable(inputs.factors[key])).length;
-  const normal = classifiableCount >= 5 && supportingCount >= 1 && FACTOR_KEYS.every((key) => factorNormal(inputs.factors[key])) &&
+  const supportingCount = SUPPORT_KEYS.filter((key) => isClassifiable(inputs.factors[key])).length;
+  const normal = classifiableCount >= 5 && supportingCount >= 1 &&
+    ANCHORS.every((key) => factorNormal(inputs.factors[key])) &&
+    SUPPORT_KEYS.some((key) => factorNormal(inputs.factors[key])) &&
     allNativeKnown(inputs.native);
   const assessmentStatus = normal ? "NORMAL" : "PROVISIONAL";
   const requiredHistories = FACTOR_KEYS.filter((key) => isClassifiable(inputs.factors[key]));

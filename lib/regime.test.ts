@@ -321,6 +321,73 @@ describe("US macro regime v0.3", () => {
     expect(result.assessmentStatus).toBe("NORMAL");
   });
 
+  describe("NORMAL supporting-factor requirements", () => {
+    const inflationaryInputs = () => inputs({
+      inflation: 75,
+      growth: 25,
+      labor: 25,
+      policyRates: 80,
+      creditConditions: 25,
+      liquidityProxy: 25,
+    }, { deltaPi: 0.8 });
+
+    it("allows Credit to satisfy the supporting role when Liquidity is withheld", () => {
+      const input = inflationaryInputs();
+      input.factors.liquidityProxy = family(null);
+
+      const result = evaluateRegime(input);
+
+      expect(result.regime).toBe("INFLATIONARY_EXPANSION");
+      expect(result.assessmentStatus).toBe("NORMAL");
+    });
+
+    it("allows Liquidity to satisfy the supporting role when Credit is withheld", () => {
+      const input = inflationaryInputs();
+      input.factors.creditConditions = family(null);
+
+      const result = evaluateRegime(input);
+
+      expect(result.regime).toBe("INFLATIONARY_EXPANSION");
+      expect(result.assessmentStatus).toBe("NORMAL");
+    });
+
+    it("does not assign NORMAL when neither supporting factor is classifiable", () => {
+      const input = inflationaryInputs();
+      input.factors.creditConditions = family(null);
+      input.factors.liquidityProxy = family(null);
+
+      const result = evaluateRegime(input);
+
+      expect(result.regime).toBe("INFLATIONARY_EXPANSION");
+      expect(result.assessmentStatus).toBe("PROVISIONAL");
+    });
+
+    it("preserves the 80% normal-quality requirement for the supporting factor", () => {
+      const input = inflationaryInputs();
+      input.factors.creditConditions = family(25, {
+        bounds: { lower: 17.5, upper: 47.5 },
+        coverage: 0.7,
+        eligibleFamilies: 2,
+      });
+      input.factors.liquidityProxy = family(null);
+
+      const result = evaluateRegime(input);
+
+      expect(result.regime).toBe("INFLATIONARY_EXPANSION");
+      expect(result.assessmentStatus).toBe("PROVISIONAL");
+    });
+
+    it("preserves the five-year history requirement for every mandatory anchor", () => {
+      const input = inflationaryInputs();
+      input.factors.growth = family(25, { historyYears: 4 });
+
+      const result = evaluateRegime(input);
+
+      expect(result.regime).toBe("INFLATIONARY_EXPANSION");
+      expect(result.assessmentStatus).toBe("PROVISIONAL");
+    });
+  });
+
   it("keeps mild one-sided weakness Mixed under Option B", () => {
     const result = evaluateRegime(inputs({
       inflation: 75, growth: 56, labor: 49,
