@@ -230,8 +230,11 @@ describe("current/revised-history diagnostic", () => {
   });
 
   it("returns NOT RUN with zero snapshots when Treasury reuse is unresolved", () => {
+    const sourceRegistry = getSourceRegistry().map((source) => source.id === "treasury-real-yield"
+      ? { ...source, sourceHealth: "REDISTRIBUTION_BLOCKED" as const, reuseStatus: "UNRESOLVED" as const }
+      : source);
     const result = runCurrentRevisedHistoryDiagnostic({
-      sourceRegistry: getSourceRegistry(),
+      sourceRegistry,
       series: [],
       startMonth: "2015-01",
       endMonth: "2015-01",
@@ -296,7 +299,9 @@ describe("current/revised-history diagnostic", () => {
   it("does not invoke external source fetches before an unresolved source gate", async () => {
     let loaded = false;
     const result = await executeCurrentRevisedHistoryDiagnostic({
-      sourceRegistry: getSourceRegistry(),
+      sourceRegistry: getSourceRegistry().map((source) => source.id === "treasury-real-yield"
+        ? { ...source, sourceHealth: "REDISTRIBUTION_BLOCKED" as const, reuseStatus: "UNRESOLVED" as const }
+        : source),
       loadSeries: async () => {
         loaded = true;
         return [];

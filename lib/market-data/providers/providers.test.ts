@@ -78,7 +78,7 @@ describe("EIA provider", () => {
 });
 
 describe("Treasury provider", () => {
-  it("keeps nominal 2Y data and withholds uncleared real 10Y data", () => {
+  it("parses nominal and official Treasury real 10Y data", () => {
     const result = parseTreasuryYields(
       fixture("treasury-yield.xml"),
       fixture("treasury-real-yield.xml"),
@@ -86,24 +86,28 @@ describe("Treasury provider", () => {
     );
 
     expectAvailable(result.twoYearYield, 3.58, "2026-10-02");
-    expect(result.tenYearRealYield).toMatchObject({ status: "unavailable", value: null });
-    expect(result.tenYearRealYield.detail).toContain("reuse/display");
+    expectAvailable(result.tenYearRealYield, 1.79, "2026-10-02");
+    expect(result.tenYearRealYield.sourceUrl).toContain("treasury.gov");
+    expect(result.tenYearRealYield.detail).toContain("TC_10YEAR");
     expect(result.twoYearYield.cadence).toBe("Daily");
   });
 
-  it("never requests the uncleared real-yield XML feed", async () => {
+  it("requests both current Treasury curve feeds independently", async () => {
     const requestedSeries: Array<string | null> = [];
     const fetchImpl = vi.fn<typeof fetch>(async (input) => {
       const url = new URL(String(input));
-      requestedSeries.push(url.searchParams.get("data"));
-      return new Response(fixture("treasury-yield.xml"), { status: 200 });
+      const series = url.searchParams.get("data");
+      requestedSeries.push(series);
+      return new Response(fixture(series === "daily_treasury_real_yield_curve"
+        ? "treasury-real-yield.xml"
+        : "treasury-yield.xml"), { status: 200 });
     });
 
     const result = await fetchTreasuryYields({ fetchImpl, now });
 
-    expect(requestedSeries).toEqual(["daily_treasury_yield_curve"]);
+    expect(requestedSeries.sort()).toEqual(["daily_treasury_real_yield_curve", "daily_treasury_yield_curve"]);
     expect(result.twoYearYield.status).toBe("available");
-    expect(result.tenYearRealYield).toMatchObject({ status: "unavailable", value: null });
+    expect(result.tenYearRealYield).toMatchObject({ status: "available", value: 1.79 });
   });
 
   it("marks malformed feeds unavailable rather than as zero", () => {

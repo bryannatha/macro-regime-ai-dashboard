@@ -237,6 +237,31 @@ export function transformLatestLevel(
   return result(latest.value, anchors, expectation.unit, [latest], points.length, historyYears);
 }
 
+export function transformBusinessDayMedian(
+  series: CoreObservationSeriesResult | null | undefined,
+  expectation: SeriesExpectation,
+  anchors: StressAnchors,
+  windowSize: number,
+): CoreTransformResult {
+  const validated = validateSeries(series, expectation, false);
+  if (!validated) return unavailable("The source, identifier, units, seasonal basis, or daily observation dates did not match the approved series.", expectation.unit);
+  const { observations, points } = validated;
+  if (expectation.cadence !== "daily" || !Number.isInteger(windowSize) || windowSize < 1) {
+    return unavailable("The approved daily median window is invalid.", expectation.unit);
+  }
+  if (points.length < windowSize) {
+    return unavailable(`The source has fewer than ${windowSize} valid daily observations for the frozen median window.`, expectation.unit);
+  }
+
+  const window = observations.slice(-windowSize);
+  const sorted = window.map(({ value }) => value).sort((left, right) => left - right);
+  const midpoint = sorted.length / 2;
+  const median = sorted.length % 2 === 0
+    ? (sorted[midpoint - 1] + sorted[midpoint]) / 2
+    : sorted[Math.floor(midpoint)];
+  return result(median, anchors, expectation.unit, window, points.length, points.length / 252);
+}
+
 export function transformUnemploymentGap(
   series: CoreObservationSeriesResult | null | undefined,
   expectation: SeriesExpectation,

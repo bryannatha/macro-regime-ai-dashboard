@@ -276,7 +276,8 @@ describe("source-aware regime dashboard", () => {
     expect(markup).toContain("MISSING");
     expect(markup).toContain("FAILED");
     expect(markup).toContain("REDISTRIBUTION_BLOCKED");
-    expect(markup).toContain("POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED");
+    expect(markup).toContain("https://catalog.data.gov/dataset/daily-treasury-real-yield-curve-rates");
+    expect(markup).toContain("TC_10YEAR");
   });
 
   it("identifies configured factor families without an admitted source", () => {

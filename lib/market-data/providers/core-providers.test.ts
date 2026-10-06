@@ -269,7 +269,11 @@ describe("official anchor source adapters", () => {
       .toBe("DPCERG: 1959M01; DPCCRG: 1959M01; DPCERX: 2007M01; A067RX: 1959M01");
     expect(source("federal-reserve-g17-ip")?.identifiers).toEqual(["B50001"]);
     expect(source("dol-initial-claims")?.attribution).toContain("U.S. Department of Labor");
-    expect(source("treasury-real-yield")).toMatchObject({ sourceHealth: "REDISTRIBUTION_BLOCKED", reuseStatus: "UNRESOLVED" });
+    expect(source("treasury-real-yield")).toMatchObject({
+      identifiers: ["TC_10YEAR"],
+      reuseStatus: "CLEARED",
+      reuseEvidenceUrl: "https://catalog.data.gov/dataset/daily-treasury-real-yield-curve-rates",
+    });
   });
 
   it("documents the BLS warm-up period separately from the dashboard adapter's default start", () => {
@@ -908,12 +912,30 @@ describe("official anchor source adapters", () => {
     });
   });
 
-  it("keeps Treasury real yields redistribution-blocked even when a valid-looking feed is supplied", () => {
+  it("parses the registered Treasury TC_10YEAR history with native units and dates", () => {
     const result = parseTreasuryRealYieldCore(fixture("treasury-real-yield.xml"), retrievedAt);
     expect(result).toMatchObject({
       sourceId: "treasury-real-yield",
-      state: "REDISTRIBUTION_BLOCKED",
-      observations: [],
+      identifier: "TC_10YEAR",
+      state: "AVAILABLE",
+      parserStatus: "VERIFIED",
+      historyStatus: "PARTIAL",
+      observations: [
+        { value: 1.82, unit: "percent", seasonalBasis: "Not seasonally adjusted", observedAt: "2026-10-01" },
+        { value: 1.79, unit: "percent", seasonalBasis: "Not seasonally adjusted", observedAt: "2026-10-02" },
+      ],
     });
+  });
+
+  it("fails closed on malformed Treasury real-yield rows and year mismatches", () => {
+    const malformed = parseTreasuryRealYieldCore(
+      "<feed><entry><content><m:properties><d:NEW_DATE>2026-10-02T00:00:00</d:NEW_DATE><d:TC_10YEAR>N/A</d:TC_10YEAR></m:properties></content></entry></feed>",
+      retrievedAt,
+      2026,
+    );
+    const wrongYear = parseTreasuryRealYieldCore(fixture("treasury-real-yield.xml"), retrievedAt, 2025);
+
+    expect(malformed).toMatchObject({ state: "FAILED", parserStatus: "FAILED", observations: [] });
+    expect(wrongYear).toMatchObject({ state: "FAILED", parserStatus: "FAILED", observations: [] });
   });
 });

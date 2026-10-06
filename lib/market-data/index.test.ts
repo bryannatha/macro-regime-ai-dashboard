@@ -57,6 +57,8 @@ function fixtureFetch(fail?: (url: URL) => boolean): typeof fetch {
     if (url.hostname === "api.eia.gov") return Response.json(jsonFixture("eia.json"));
     if (url.hostname === "home.treasury.gov") {
       const real = url.searchParams.get("data") === "daily_treasury_real_yield_curve";
+      const year = url.searchParams.get("field_tdr_date_value");
+      if (year && year !== "2026") return new Response("<feed />");
       return new Response(fixture(real ? "treasury-real-yield.xml" : "treasury-yield.xml"));
     }
     if (url.hostname === "oui.doleta.gov") return new Response(dolReleaseFixture());
@@ -121,8 +123,8 @@ describe("getDashboardPayload", () => {
 
     expect(payload.generatedAt).toBe(generatedAt);
     expect(payload.dataAsOf).toBe("2026-10-03");
-    expect(Object.values(payload.observations).filter((item) => item.status === "available")).toHaveLength(9);
-    expect(payload.observations.tenYearRealYield).toMatchObject({ status: "unavailable", value: null });
+    expect(Object.values(payload.observations).filter((item) => item.status === "available")).toHaveLength(10);
+    expect(payload.observations.tenYearRealYield).toMatchObject({ status: "available", value: 1.79, observedAt: "2026-10-02" });
     expect(Object.values(payload.observations).every((item) => item.fetchedAt === generatedAt)).toBe(true);
     expect(Object.values(payload.observations).filter((item) => item.status === "excluded").map((item) => item.key).sort())
       .toEqual([...excludedKeys].sort());
@@ -136,16 +138,13 @@ describe("getDashboardPayload", () => {
       dataQuality: 0,
       regimeClarity: null,
     });
-    expect(payload.regime.reasonCodes).toContain("POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED");
+    expect(payload.regime.reasonCodes).not.toContain("POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED");
     expect(payload.regime.leadingDirection.direction).toBe("UNKNOWN");
     expect(payload.regime.inflationDirection.direction).toBe("UNKNOWN");
     expect(payload.regime.transitionRisk.level).toBe("UNKNOWN");
     expect(payload.researchImplications).toBeNull();
     expect(Object.values(payload.regime.factorReadiness).every((factor) => !factor.classifiable)).toBe(true);
-    expect(payload.sourceRegistry.find((entry) => entry.id === "treasury-real-yield")).toMatchObject({
-      sourceHealth: "REDISTRIBUTION_BLOCKED",
-      reuseStatus: "UNRESOLVED",
-    });
+    expect(payload.sourceRegistry.find((entry) => entry.id === "treasury-real-yield")?.reuseStatus).toBe("CLEARED");
     expect(JSON.stringify(payload)).not.toContain("fixture-secret-not-real");
   });
 
@@ -171,7 +170,7 @@ describe("getDashboardPayload", () => {
     });
     expect(payload.regime.factorReadiness.growth.classifiable).toBe(false);
     expect(payload.regime).toMatchObject({ assessmentStatus: "INSUFFICIENT_DATA", regime: null });
-    expect(payload.regime.reasonCodes).toContain("POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED");
+    expect(payload.regime.reasonCodes).not.toContain("POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED");
     expect(payload.scores).toHaveLength(5);
     expect(payload.sourceRegistry.find((source) => source.id === "bls-cpi")).toMatchObject({
       sourceHealth: "AVAILABLE",
@@ -341,7 +340,7 @@ describe("getDashboardPayload", () => {
     });
 
     expect(payload.observations.twoYearYield).toMatchObject({ status: "unavailable", value: null });
-    expect(payload.observations.tenYearRealYield).toMatchObject({ status: "unavailable", value: null });
+    expect(payload.observations.tenYearRealYield).toMatchObject({ status: "available", value: 1.79 });
     expect(payload.observations.cpi.status).toBe("available");
   });
 

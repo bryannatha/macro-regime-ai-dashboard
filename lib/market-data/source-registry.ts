@@ -21,6 +21,7 @@ const BEA_REUSE = "https://www.bea.gov/help/faq/147";
 const FEDERAL_RESERVE_TERMS = "https://www.federalreserve.gov/disclaimer.htm";
 const DOL_REUSE = "https://www.dol.gov/general/aboutdol/copyright";
 const TREASURY_FEED = "https://home.treasury.gov/treasury-daily-interest-rate-xml-feed";
+const TREASURY_REAL_YIELD_REUSE = "https://catalog.data.gov/dataset/daily-treasury-real-yield-curve-rates";
 
 export const SOURCE_REGISTRY: readonly SourceRegistryEntry[] = [
   {
@@ -195,23 +196,23 @@ export const SOURCE_REGISTRY: readonly SourceRegistryEntry[] = [
     id: "treasury-real-yield",
     name: "Daily Treasury 10-year real par yield",
     owner: "U.S. Department of the Treasury",
-    endpoint: `${TREASURY_FEED} (XML endpoint: /resource-center/data-chart-center/interest-rates/pages/xml)`,
-    identifiers: ["daily_treasury_real_yield_curve", "TC_10YEAR"],
+    endpoint: "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/pages/xml?data=daily_treasury_real_yield_curve&field_tdr_date_value=YYYY",
+    identifiers: ["TC_10YEAR"],
     accessMethod: "Official Treasury daily-interest-rate XML feed",
-    reuseStatus: "UNRESOLVED",
-    reuseEvidenceUrl: null,
+    reuseStatus: "CLEARED",
+    reuseEvidenceUrl: TREASURY_REAL_YIELD_REUSE,
     reuseReviewUrl: TREASURY_FEED,
-    attribution: "The feed-specific documentation does not state reuse/display terms; attribution alone does not clear redistribution.",
+    attribution: "Source: U.S. Treasury, Daily Treasury Par Real Yield Curve Rates (10-year R-CMT, TC_10YEAR). Treasury derives this series from indicative market quotations obtained by FRBNY. Macro Regime AI Dashboard calculations; not Treasury/FRBNY affiliated or endorsed.",
     cadence: "daily",
     firstUsablePeriod: "2003",
     units: ["percent"],
     seasonalBases: ["Not seasonally adjusted"],
-    expectedReleaseSchedule: "Business-day rate based on indicative bid-side quotes around 3:30 PM ET; feed documentation does not establish an exact publication timestamp.",
+    expectedReleaseSchedule: "Daily business-day series available since 2003 through the documented XML feed; the observation date is not an asserted publication timestamp. Published Treasury values reflect indicative market quotations obtained by FRBNY.",
     releaseDateQuality: 0,
-    sourceHealth: "REDISTRIBUTION_BLOCKED",
-    parserStatus: "PARTIAL",
+    sourceHealth: "MISSING",
+    parserStatus: "VERIFIED",
     historyStatus: "PARTIAL",
-    verifiedAt: "2026-10-04",
+    verifiedAt: "2026-10-06",
     familyAllocations: [{ factor: "policyRates", family: "realFinancing", weight: 0.5 }],
   },
   {

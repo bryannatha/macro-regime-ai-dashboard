@@ -4,6 +4,7 @@ import type { AdapterOptions, CoreObservationSeriesResult } from "../types";
 import { fetchBeaCoreSources } from "./bea";
 import { fetchBlsCoreSources } from "./bls";
 import { fetchDolCoreClaims } from "./dol";
+import { fetchTreasuryRealYieldCore } from "./treasury";
 import {
   fetchFederalReserveIndustrialProduction,
   fetchFederalReservePolicyActions,
@@ -48,6 +49,12 @@ const fetchCachedBeaSources = unstable_cache(
   { revalidate: 86400 },
 );
 
+const fetchCachedTreasuryRealYield = unstable_cache(
+  async () => requireCacheableSources(await fetchTreasuryRealYieldCore()),
+  ["macro-regime-treasury-real-yield-tc-10year-v1"],
+  { revalidate: 86400 },
+);
+
 function failedSeries(sourceIds: string[], retrievedAt: string): CoreObservationSeriesResult[] {
   return getSourceRegistry()
     .filter(({ id }) => sourceIds.includes(id))
@@ -80,7 +87,7 @@ async function isolateProvider(
 export async function fetchCoreHistorySources(options: CoreHistoryOptions = {}): Promise<CoreObservationSeriesResult[]> {
   const retrievedAt = (options.now ?? new Date()).toISOString();
   const bypassCache = options.fetchImpl !== undefined || options.historyStartYear !== undefined;
-  const [bls, bea, claims, production, policy, h41, h6, sloos, h8, credit] = await Promise.all([
+  const [bls, bea, claims, production, policy, h41, h6, sloos, h8, credit, treasury] = await Promise.all([
     isolateProvider(["bls-cpi", "bls-labor"], fetchBlsCoreSources(options), retrievedAt),
     isolateProvider(["bea-gdp", "bea-pce-income"], bypassCache
       ? fetchBeaCoreSources(options)
@@ -95,6 +102,9 @@ export async function fetchCoreHistorySources(options: CoreHistoryOptions = {}):
     isolateProvider(["federal-reserve-sloos"], fetchFederalReserveSloos(options), retrievedAt),
     isolateProvider(["federal-reserve-h8"], fetchFederalReserveH8Loans(options), retrievedAt),
     isolateProvider(["federal-reserve-credit-performance"], fetchFederalReserveCreditPerformance(options), retrievedAt),
+    isolateProvider(["treasury-real-yield"], bypassCache
+      ? fetchTreasuryRealYieldCore(options)
+      : fetchCachedTreasuryRealYield(), retrievedAt),
   ]);
 
   return [
@@ -108,5 +118,6 @@ export async function fetchCoreHistorySources(options: CoreHistoryOptions = {}):
     ...sloos,
     ...h8,
     ...credit,
+    ...treasury,
   ];
 }

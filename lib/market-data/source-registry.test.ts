@@ -103,8 +103,10 @@ describe("core source registry and observation provenance", () => {
 
     const treasury = registry.SOURCE_REGISTRY.find((entry: { id: string }) => entry.id === "treasury-real-yield");
     expect(treasury).toMatchObject({
-      sourceHealth: "REDISTRIBUTION_BLOCKED",
-      reuseStatus: "UNRESOLVED",
+      identifiers: ["TC_10YEAR"],
+      sourceHealth: "MISSING",
+      reuseStatus: "CLEARED",
+      reuseEvidenceUrl: "https://catalog.data.gov/dataset/daily-treasury-real-yield-curve-rates",
       familyAllocations: [{ factor: "policyRates", family: "realFinancing", weight: 0.5 }],
     });
   });
@@ -218,7 +220,7 @@ describe("core source registry and observation provenance", () => {
     expect(calculateDataQuality([registry.toQualitySlot(resolved, { weight: 1, history: 1, release: 1 })])).toBe(0);
   });
 
-  it("keeps configured family weights unchanged when Treasury reuse is blocked", async () => {
+  it("keeps configured family weights unchanged when Treasury reuse is cleared", async () => {
     const registry = await loadRegistryModule();
     expect(registry).not.toBeNull();
     if (!registry) return;
@@ -227,12 +229,19 @@ describe("core source registry and observation provenance", () => {
     expect(treasury.familyAllocations).toEqual([
       { factor: "policyRates", family: "realFinancing", weight: 0.5 },
     ]);
-    expect(registry.resolveSourceObservation(treasury, {
+    expect(registry.resolveSourceObservation({ ...treasury, sourceHealth: "AVAILABLE" }, {
       now: new Date("2026-10-04T12:00:00.000Z"),
       fetchAttempt: { status: "NOT_ATTEMPTED", attemptedAt: null },
-      cache: { observation: observation({ sourceId: treasury.id, identifier: "TC_10YEAR" }), validatedAt: "2026-10-02T08:31:00.000Z", validationVersion: "fixture-v1" },
+      cache: { observation: observation({
+        sourceId: treasury.id,
+        identifier: "TC_10YEAR",
+        unit: "percent",
+        seasonalBasis: "Not seasonally adjusted",
+        observedAt: "2026-10-02",
+        releaseDateQuality: 0,
+      }), validatedAt: "2026-10-02T08:31:00.000Z", validationVersion: "fixture-v1" },
       freshnessWindow: freshWindow,
-    })).toMatchObject({ state: "REDISTRIBUTION_BLOCKED", eligible: false, fetchHealth: 0 });
+    })).toMatchObject({ state: "AVAILABLE", eligible: true });
   });
 
   it("cannot increase Data Quality as a failed-fetch cache ages", async () => {

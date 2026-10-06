@@ -3,6 +3,8 @@
 Review date: 2026-10-05<br>
 Decision: Candidate semantics and sampled values are equivalent; source amendment is not accepted because the only verified CSV delivery path is scheduled for removal.
 
+Supersession note (2026-10-06): H.15 remains unadmitted. The direct Treasury XML route and its reuse basis are reviewed separately in [US-MACRO-0.3.1 Treasury real-yield source amendment](./US-MACRO-0.3.1-treasury-real-yield-source-amendment.md); that later review supersedes only the Treasury reuse conclusion below, not the H.15 delivery-lifecycle finding.
+
 ## Frozen Slot
 
 The existing `policyRates.realFinancing` slot requires the daily 10-year real Treasury constant-maturity yield, in percent, with a daily observation date. This review does not change its definition, history requirement, transform, weight, threshold, coverage rule, or factor gate.

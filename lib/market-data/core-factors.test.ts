@@ -26,6 +26,17 @@ function weeklyDates(count: number): string[] {
   return Array.from({ length: count }, (_, index) => new Date(first + index * 7 * 86_400_000).toISOString().slice(0, 10));
 }
 
+function businessDayDates(count: number, endDate: string): string[] {
+  const dates: string[] = [];
+  let timestamp = Date.parse(`${endDate}T00:00:00.000Z`);
+  while (dates.length < count) {
+    const day = new Date(timestamp).getUTCDay();
+    if (day !== 0 && day !== 6) dates.push(new Date(timestamp).toISOString().slice(0, 10));
+    timestamp -= 86_400_000;
+  }
+  return dates.reverse();
+}
+
 function makeSeries(
   sourceId: string,
   identifier: string,
@@ -200,6 +211,35 @@ describe("approved anchor family aggregation", () => {
     expect(assessment).toMatchObject({ assessmentStatus: "INSUFFICIENT_DATA", regime: null });
     expect(assessment.reasonCodes).toContain("POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED");
     expect(assessment.leadingDirection.direction).toBe("UNKNOWN");
+  });
+
+  it("scores Treasury real financing from the frozen 20-business-observation median", () => {
+    const values = Array.from({ length: 2520 }, () => 1.5);
+    values.splice(2500, 20, ...Array.from({ length: 20 }, (_, index) => index / 10));
+    const dates = businessDayDates(2521, "2026-10-02").filter((_, index) => index !== 100);
+    const treasury = makeSeries(
+      "treasury-real-yield",
+      "TC_10YEAR",
+      values,
+      dates,
+      "percent",
+      "Not seasonally adjusted",
+    );
+    treasury.historyStatus = "PARTIAL";
+    const result = buildCoreFactors([
+      ...sourceFixture().filter(({ sourceId }) => sourceId !== "treasury-real-yield"),
+      treasury,
+    ], asOf).factors.policyRates;
+    const financing = result.families.find(({ key }) => key === "realFinancing")!;
+    const slot = financing.slots[0];
+
+    expect(financing).toMatchObject({ eligible: true, coverage: 1, weight: 0.5 });
+    expect(slot.value).toBeCloseTo(0.95, 10);
+    expect(slot.score).toBeCloseTo(48.75, 10);
+    expect(slot.historyPoints).toBe(2520);
+    expect(slot.historyYears).toBe(10);
+    expect(slot.observedAt).toBe("2026-10-02");
+    expect(result).toMatchObject({ coverage: 1, eligibleFamilies: 2 });
   });
 
   it("does not substitute headline PCE when the registered core-PCE series is missing", () => {

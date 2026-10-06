@@ -13,6 +13,7 @@ import {
   CORE_SCORE_ANCHORS,
   interpolateStress,
   transformAnnualized3m,
+  transformBusinessDayMedian,
   transformClaimsIntensity,
   transformCreditStandards,
   transformCreditVolume,
@@ -355,7 +356,7 @@ export function buildCoreFactors(
   const treasury = at(TREASURY_REAL) ?? sources.find(({ sourceId }) => sourceId === TREASURY_REAL.sourceId) ?? null;
   const realFinancing = treasury?.state === "REDISTRIBUTION_BLOCKED"
     ? unavailableMetric("Treasury real-yield redistribution is blocked pending source-specific clearance.", "percent", [TREASURY_REAL.sourceId], [TREASURY_REAL.identifier])
-    : unavailableMetric("No eligible Treasury 10-year real par-yield history was supplied.", "percent", [TREASURY_REAL.sourceId], [TREASURY_REAL.identifier]);
+    : transformBusinessDayMedian(at(TREASURY_REAL), TREASURY_REAL, CORE_SCORE_ANCHORS.realFinancing, 20);
   const policyFamilies = [
     scoreFamily("policyRates", "realPolicyStance", 0.5, realPolicy, 120),
     scoreFamily("policyRates", "realFinancing", 0.5, realFinancing, 2520),
