@@ -10,11 +10,11 @@ import { createUnconfiguredRegimeInputs } from "@/lib/market-data/regime-inputs"
 import { GET } from "./route";
 
 const scores: CategoryScore[] = [
-  { key: "inflationPressure", label: "Inflation pressure indicator", score: 42, coverage: 1, coveragePercent: 100, orientation: "risk", reading: "Watch", summary: "CPI monitoring proxy.", explanation: "Indicator only." },
-  { key: "growthStress", label: "Growth stress indicator", score: 38, coverage: 0.65, coveragePercent: 65, orientation: "risk", reading: "Contained", summary: "Claims monitoring proxy.", explanation: "Indicator only." },
-  { key: "liquidity", label: "Liquidity indicator", score: 66, coverage: 1, coveragePercent: 100, orientation: "support", reading: "Strong", summary: "Broad dollar and real yield monitoring proxy.", explanation: "Indicator only." },
-  { key: "cryptoDemand", label: "Crypto blockspace indicator", score: 59, coverage: 1, coveragePercent: 100, orientation: "demand", reading: "Building", summary: "Blockspace proxy, not buying pressure.", explanation: "Indicator only." },
-  { key: "indonesiaRisk", label: "Indonesia FX risk indicator", score: 54, coverage: 0.75, coveragePercent: 75, orientation: "risk", reading: "Watch", summary: "ECB-derived USD/IDR cross.", explanation: "Indicator only." },
+  { key: "inflationPressure", label: "Inflation pressure", score: 42, coverage: 1, coveragePercent: 100, orientation: "risk", reading: "Watch", summary: "CPI monitoring proxy.", explanation: "Indicator only." },
+  { key: "growthStress", label: "Growth stress", score: 38, coverage: 0.65, coveragePercent: 65, orientation: "risk", reading: "Contained", summary: "Claims monitoring proxy.", explanation: "Indicator only." },
+  { key: "liquidity", label: "Legacy Liquidity Monitor", score: 66, coverage: 1, coveragePercent: 100, orientation: "support", reading: "Strong", summary: "Broad dollar and real yield monitoring proxy.", explanation: "Indicator only." },
+  { key: "cryptoDemand", label: "Bitcoin Blockspace Activity", score: 59, coverage: 1, coveragePercent: 100, orientation: "demand", reading: "Building", summary: "Blockspace proxy, not buying pressure.", explanation: "Indicator only." },
+  { key: "indonesiaRisk", label: "Indonesia risk", score: 54, coverage: 0.75, coveragePercent: 75, orientation: "risk", reading: "Watch", summary: "ECB-derived USD/IDR cross.", explanation: "Indicator only." },
 ];
 
 const emptyRegime = evaluateRegime(createUnconfiguredRegimeInputs());
@@ -32,6 +32,7 @@ function dashboard(regime: RegimeAssessment = emptyRegime): DashboardPayload {
   return {
     generatedAt: "2026-10-03T12:00:00.000Z",
     dataAsOf: "2026-10-02",
+    sourceRegistry: [],
     observations: {
       cpi: { value: 3, status: "available", label: "CPI", observedAt: "2026-09-01", source: "BLS", detail: "", unit: "% YoY", key: "cpi", sourceUrl: null, fetchedAt: "2026-10-03T12:00:00.000Z", cadence: "Monthly", history: [] },
       oil: { value: null, status: "unavailable", label: "Brent crude", observedAt: null, source: "EIA", detail: "EIA_API_KEY is not configured", unit: "USD / barrel", key: "oil", sourceUrl: null, fetchedAt: "2026-10-03T12:00:00.000Z", cadence: "Daily", history: [] },
@@ -62,9 +63,39 @@ describe("GET /api/ai-report", () => {
     expect(report.executiveSummary).toContain("monitoring indicators");
     expect(report.executiveSummary).toMatch(/missing inputs/i);
     expect(report.researchImplications).toBeNull();
+    expect(report.leadingDirection.direction).toBe("UNKNOWN");
+    expect(report.inflationDirection.direction).toBe("UNKNOWN");
+    expect(report.transitionRisk.level).toBe("UNKNOWN");
     expect(report.riskNote).toContain("Educational research tool, not financial advice.");
     expect(JSON.stringify(report)).not.toContain("EIA_API_KEY");
     expect(JSON.stringify(report)).not.toMatch(/\b(favor|reduce)\b/i);
+  });
+
+  it("keeps the Treasury blocker and withheld regime in a deterministic report", async () => {
+    const blocker = "POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED";
+    const blocked = evaluateRegime(createUnconfiguredRegimeInputs([blocker]));
+    vi.mocked(getDashboardPayload).mockResolvedValue(dashboard(blocked));
+
+    const first = await (await GET()).json();
+    const second = await (await GET()).json();
+
+    expect(JSON.stringify(first)).toBe(JSON.stringify(second));
+    expect(first).toMatchObject({ regime: null, assessmentStatus: "INSUFFICIENT_DATA" });
+    expect(first.executiveSummary).toContain(blocker);
+    expect(first.researchImplications).toBeNull();
+    expect(first.leadingDirection.direction).toBe("UNKNOWN");
+    expect(first.inflationDirection.direction).toBe("UNKNOWN");
+    expect(first.transitionRisk.level).toBe("UNKNOWN");
+  });
+
+  it("suppresses research implications for a provisional regime even when a label is resolved", async () => {
+    const provisional = { ...normalRegime, assessmentStatus: "PROVISIONAL" as const };
+    vi.mocked(getDashboardPayload).mockResolvedValue(dashboard(provisional));
+
+    const report = await (await GET()).json();
+
+    expect(report).toMatchObject({ regime: "INFLATIONARY_EXPANSION", assessmentStatus: "PROVISIONAL" });
+    expect(report.researchImplications).toBeNull();
   });
 
   it("returns descriptive regime implications without causal demand language", async () => {

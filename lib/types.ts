@@ -1,3 +1,54 @@
+export const SOURCE_STATES = [
+  "AVAILABLE",
+  "STALE",
+  "MISSING",
+  "FAILED",
+  "REDISTRIBUTION_BLOCKED",
+] as const;
+
+export const TREASURY_POLICY_BLOCKER = "POLICY_RATES_WITHHELD — TREASURY_REUSE_UNRESOLVED";
+
+export type SourceState = (typeof SOURCE_STATES)[number];
+export type SourceReuseStatus = "CLEARED" | "CONDITIONAL" | "UNRESOLVED" | "BLOCKED";
+export type SourceParserStatus = "UNVERIFIED" | "PARTIAL" | "VERIFIED" | "FAILED";
+export type SourceHistoryStatus = "UNVERIFIED" | "PARTIAL" | "VERIFIED" | "FAILED";
+export type CoreSourceCadence = "daily" | "weekly" | "monthly" | "quarterly";
+export type CoreReadinessStatus = "READY" | "ADEQUATE" | "LIMITED" | "WITHHELD";
+
+export interface SourceFamilyAllocation {
+  factor: RegimeFactorKey;
+  family: string;
+  weight: number;
+}
+
+export interface SourceRegistryEntry {
+  id: string;
+  name: string;
+  owner: string;
+  endpoint: string;
+  identifiers: string[];
+  accessMethod: string;
+  reuseStatus: SourceReuseStatus;
+  reuseEvidenceUrl: string | null;
+  reuseReviewUrl: string;
+  attribution: string;
+  cadence: CoreSourceCadence;
+  firstUsablePeriod: string | null;
+  units: string[];
+  seasonalBases: string[];
+  expectedReleaseSchedule: string;
+  releaseDateQuality: number | null;
+  sourceHealth: SourceState;
+  parserStatus: SourceParserStatus;
+  historyStatus: SourceHistoryStatus;
+  verifiedAt: string | null;
+  familyAllocations: SourceFamilyAllocation[];
+  observedAt?: string | null;
+  releasedAt?: string | null;
+  retrievedAt?: string | null;
+  healthReason?: string | null;
+}
+
 export type ObservationKey =
   | "cpi"
   | "coreCpi"
@@ -45,11 +96,18 @@ export type ScoreKey =
   | "cryptoDemand"
   | "indonesiaRisk";
 
+export type ScoreLabel =
+  | "Inflation pressure"
+  | "Growth stress"
+  | "Legacy Liquidity Monitor"
+  | "Bitcoin Blockspace Activity"
+  | "Indonesia risk";
+
 export type ScoreOrientation = "risk" | "support" | "demand";
 
 export interface CategoryScore {
   key: ScoreKey;
-  label: string;
+  label: ScoreLabel;
   score: number | null;
   coverage: number;
   coveragePercent: number;
@@ -73,6 +131,14 @@ export type AssessmentStatus = "NORMAL" | "PROVISIONAL" | "INSUFFICIENT_DATA";
 export type SensitivityClass = "ROBUST" | "MODERATELY_SENSITIVE" | "FRAGILE";
 export type GateResult = "TRUE" | "FALSE" | "UNKNOWN";
 export type ActivitySeverity = "STANDARD" | "CONTRACTION_LEVEL";
+export type MacroDirection =
+  | "STRONGLY_IMPROVING"
+  | "IMPROVING"
+  | "NEUTRAL"
+  | "DETERIORATING"
+  | "STRONGLY_DETERIORATING"
+  | "UNKNOWN";
+export type TransitionRiskLevel = "LOW" | "MODERATE" | "ELEVATED" | "UNKNOWN";
 
 export type RegimeFactorKey =
   | "inflation"
@@ -89,10 +155,16 @@ export interface ScoreBounds {
   upper: number;
 }
 
+export interface DirectionScoreRange {
+  lower: number;
+  upper: number;
+}
+
 export interface RegimeFactorInput {
   bounds: ScoreBounds | null;
   coverage: number;
   eligibleFamilies: number;
+  configuredFamilies?: number;
   historyYears: number | null;
   releaseQuality: number | null;
 }
@@ -120,10 +192,53 @@ export interface RegimeNativeInputs {
   creditVolume?: number | null;
 }
 
+export interface FactorMomentumInput {
+  scoreChange: number | null;
+  commonEligibleWeight: number;
+  commonEligibleFamilies: number;
+}
+
+export interface SourceMomentumInputs {
+  growth: FactorMomentumInput | null;
+  labor: FactorMomentumInput | null;
+  credit: FactorMomentumInput | null;
+}
+
+export interface LeadingDirectionAssessment {
+  direction: MacroDirection;
+  weightedScore: number | null;
+  scoreRange: DirectionScoreRange | null;
+  dispersion: number | null;
+  votes: {
+    growth: MacroDirection;
+    labor: MacroDirection;
+    credit: MacroDirection;
+  };
+  reason: string | null;
+}
+
+export interface InflationDirectionAssessment {
+  direction: MacroDirection;
+  deltaPi: number | null;
+}
+
+export interface TransitionRiskAssessment {
+  level: TransitionRiskLevel;
+  reasonCodes: string[];
+}
+
+export interface PriorTensionComparison {
+  comparable: boolean;
+  tensions: RegimeTension[];
+}
+
 export interface RegimeInputs {
   factors: Record<RegimeFactorKey, RegimeFactorInput>;
   native: RegimeNativeInputs;
   qualitySlots: QualitySlotInput[];
+  sourceMomentum?: SourceMomentumInputs | null;
+  priorTensionComparison?: PriorTensionComparison | null;
+  sourceBlockers?: string[];
 }
 
 export interface RuleDiagnostic {
@@ -147,12 +262,16 @@ export interface RegimeSensitivity {
   coherentAgreement: number;
   agreement: number;
   nativeGuardChanged: boolean;
+  differentResolvedRegime: boolean;
+  differentNamedRegime: boolean;
 }
 
 export interface FactorReadiness {
   coverage: number;
   eligibleFamilies: number;
+  configuredFamilies: number;
   classifiable: boolean;
+  status: CoreReadinessStatus;
 }
 
 export interface RegimeAssessment {
@@ -167,6 +286,9 @@ export interface RegimeAssessment {
   factorReadiness: Record<RegimeFactorKey, FactorReadiness>;
   ruleDiagnostics: Record<Regime, RuleDiagnostic>;
   tensions: RegimeTension[];
+  leadingDirection: LeadingDirectionAssessment;
+  inflationDirection: InflationDirectionAssessment;
+  transitionRisk: TransitionRiskAssessment;
 }
 
 export interface ResearchImplications {
@@ -182,6 +304,7 @@ export interface ResearchImplications {
 export interface DashboardPayload {
   generatedAt: string;
   dataAsOf: string | null;
+  sourceRegistry: SourceRegistryEntry[];
   observations: ObservationMap;
   scores: CategoryScore[];
   regime: RegimeAssessment;
@@ -196,6 +319,9 @@ export interface AIReport {
   assessmentStatus: AssessmentStatus;
   dataQuality: number | null;
   regimeClarity: number | null;
+  leadingDirection: LeadingDirectionAssessment;
+  inflationDirection: InflationDirectionAssessment;
+  transitionRisk: TransitionRiskAssessment;
   executiveSummary: string;
   signals: string[];
   watchlist: string[];

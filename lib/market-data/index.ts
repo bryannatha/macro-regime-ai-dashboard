@@ -4,22 +4,27 @@ import type {
   ObservationKey,
   ObservationMap,
 } from "@/lib/types";
+import { TREASURY_POLICY_BLOCKER } from "@/lib/types";
 import { getResearchImplications } from "@/lib/playbook";
 import { evaluateRegime } from "@/lib/regime";
 import { calculateScores } from "@/lib/scoring";
+import { buildCoreFactors } from "./core-factors";
 import { createUnavailableObservation } from "./parsers";
-import type { AdapterOptions } from "./types";
+import { createRegimeInputsFromCoreFactors } from "./regime-inputs";
+import { getSourceRegistry, prepareCurrentCoreSources } from "./source-registry";
 import { fetchBlsCpi } from "./providers/bls";
+import { fetchCoreHistorySources, type CoreHistoryOptions } from "./providers/core-history";
 import { fetchDolClaims } from "./providers/dol";
 import { fetchEiaBrent } from "./providers/eia";
 import { fetchFedBroadDollar } from "./providers/fed";
 import { fetchFrankfurterUsdIdr } from "./providers/frankfurter";
 import { fetchMempoolDemand } from "./providers/mempool";
 import { fetchTreasuryYields } from "./providers/treasury";
-import { createUnconfiguredRegimeInputs } from "./regime-inputs";
+import type { AdapterOptions, CoreObservationSeriesResult } from "./types";
 
 export interface DashboardOptions extends AdapterOptions {
   eiaApiKey?: string;
+  loadCoreSources?: (options: CoreHistoryOptions) => Promise<CoreObservationSeriesResult[]>;
 }
 
 const sources = {
@@ -106,49 +111,57 @@ async function isolateFailure<T>(promise: Promise<T>, fallback: T): Promise<T> {
 }
 
 export async function getDashboardPayload(options: DashboardOptions = {}): Promise<DashboardPayload> {
-  const now = options.now ?? new Date();
-  const generatedAt = now.toISOString();
-  const adapterOptions = { fetchImpl: options.fetchImpl, now };
+  const requestStartedAt = options.now ?? new Date();
+  const requestStartedAtIso = requestStartedAt.toISOString();
+  const adapterOptions = { fetchImpl: options.fetchImpl, now: requestStartedAt };
+  const coreAdapterOptions: CoreHistoryOptions = adapterOptions;
 
-  const [bls, oil, treasury, claims, dollar, mempool, usdidr] = await Promise.all([
+  const [bls, oil, treasury, claims, dollar, mempool, usdidr, coreSources] = await Promise.all([
     isolateFailure(
       fetchBlsCpi(adapterOptions),
       {
-        cpi: unavailable("cpi", "CPI", "% YoY", sources.bls.name, sources.bls.url, generatedAt, "Monthly"),
-        coreCpi: unavailable("coreCpi", "Core CPI", "% YoY", sources.bls.name, sources.bls.url, generatedAt, "Monthly"),
+        cpi: unavailable("cpi", "CPI", "% YoY", sources.bls.name, sources.bls.url, requestStartedAtIso, "Monthly"),
+        coreCpi: unavailable("coreCpi", "Core CPI", "% YoY", sources.bls.name, sources.bls.url, requestStartedAtIso, "Monthly"),
       },
     ),
     isolateFailure(
       fetchEiaBrent({ ...adapterOptions, apiKey: options.eiaApiKey }),
-      unavailable("oil", "Brent crude", "USD / barrel", sources.eia.name, sources.eia.url, generatedAt, "Daily"),
+      unavailable("oil", "Brent crude", "USD / barrel", sources.eia.name, sources.eia.url, requestStartedAtIso, "Daily"),
     ),
     isolateFailure(
       fetchTreasuryYields(adapterOptions),
       {
-        twoYearYield: unavailable("twoYearYield", "U.S. 2-year Treasury yield", "%", sources.treasury.name, sources.treasury.url, generatedAt, "Daily"),
-        tenYearRealYield: unavailable("tenYearRealYield", "U.S. 10-year real Treasury yield", "%", sources.treasury.name, sources.treasury.url, generatedAt, "Daily"),
+        twoYearYield: unavailable("twoYearYield", "U.S. 2-year Treasury yield", "%", sources.treasury.name, sources.treasury.url, requestStartedAtIso, "Daily"),
+        tenYearRealYield: unavailable("tenYearRealYield", "U.S. 10-year real Treasury yield", "%", sources.treasury.name, sources.treasury.url, requestStartedAtIso, "Daily"),
       },
     ),
     isolateFailure(
       fetchDolClaims(adapterOptions),
-      unavailable("joblessClaims", "Initial claims (SA)", "thousand claims", sources.dol.name, sources.dol.url, generatedAt, "Weekly"),
+      unavailable("joblessClaims", "Initial claims (SA)", "thousand claims", sources.dol.name, sources.dol.url, requestStartedAtIso, "Weekly"),
     ),
     isolateFailure(
       fetchFedBroadDollar(adapterOptions),
-      unavailable("broadDollarIndex", "Broad Dollar Index", "Index (Jan 2006=100)", sources.fed.name, sources.fed.url, generatedAt, "Daily"),
+      unavailable("broadDollarIndex", "Broad Dollar Index", "Index (Jan 2006=100)", sources.fed.name, sources.fed.url, requestStartedAtIso, "Daily"),
     ),
     isolateFailure(
       fetchMempoolDemand(adapterOptions),
       {
-        mempoolVsize: unavailable("mempoolVsize", "Bitcoin mempool backlog", "vB", sources.mempool.name, sources.mempool.url, generatedAt, "Current"),
-        mempoolMedianFeeRate: unavailable("mempoolMedianFeeRate", "Projected block median fee", "sat/vB", sources.mempool.name, sources.mempool.url, generatedAt, "Current"),
+        mempoolVsize: unavailable("mempoolVsize", "Bitcoin mempool backlog", "vB", sources.mempool.name, sources.mempool.url, requestStartedAtIso, "Current"),
+        mempoolMedianFeeRate: unavailable("mempoolMedianFeeRate", "Projected block median fee", "sat/vB", sources.mempool.name, sources.mempool.url, requestStartedAtIso, "Current"),
       },
     ),
     isolateFailure(
       fetchFrankfurterUsdIdr(adapterOptions),
-      unavailable("usdidr", "USD / IDR (ECB cross)", "IDR per USD", sources.frankfurter.name, sources.frankfurter.url, generatedAt, "Daily"),
+      unavailable("usdidr", "USD / IDR (ECB cross)", "IDR per USD", sources.frankfurter.name, sources.frankfurter.url, requestStartedAtIso, "Daily"),
+    ),
+    isolateFailure(
+      (options.loadCoreSources ?? fetchCoreHistorySources)(coreAdapterOptions),
+      [] as CoreObservationSeriesResult[],
     ),
   ]);
+
+  const evaluationTime = options.now ?? new Date();
+  const generatedAt = evaluationTime.toISOString();
 
   const observations: ObservationMap = {
     ...bls,
@@ -191,15 +204,25 @@ export async function getDashboardPayload(options: DashboardOptions = {}): Promi
     observation.status === "available" && observation.observedAt ? [observation.observedAt] : [],
   );
   const scores = calculateScores(observations);
-  // Current public feeds are monitoring proxies, not the registered two-family core-factor inputs.
-  const regime = evaluateRegime(createUnconfiguredRegimeInputs());
+  const preparedCore = prepareCurrentCoreSources(getSourceRegistry(), coreSources, evaluationTime);
+  const sourceRegistry = preparedCore.sourceRegistry;
+  const sourceBlockers = sourceRegistry.some((source) =>
+    source.id === "treasury-real-yield" && source.sourceHealth === "REDISTRIBUTION_BLOCKED")
+    ? [TREASURY_POLICY_BLOCKER]
+    : [];
+  const regimeInputs = createRegimeInputsFromCoreFactors(buildCoreFactors(preparedCore.series, generatedAt));
+  regimeInputs.sourceBlockers = Array.from(new Set([...sourceBlockers, ...(regimeInputs.sourceBlockers ?? [])]));
+  const regime = evaluateRegime(regimeInputs);
 
   return {
     generatedAt,
     dataAsOf: dates.sort().at(-1) ?? null,
+    sourceRegistry,
     observations,
     scores,
     regime,
-    researchImplications: regime.regime ? getResearchImplications(regime.regime) : null,
+    researchImplications: regime.assessmentStatus === "NORMAL" && regime.regime
+      ? getResearchImplications(regime.regime)
+      : null,
   };
 }

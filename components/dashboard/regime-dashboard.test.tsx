@@ -12,8 +12,9 @@ import type {
 } from "@/lib/types";
 import { evaluateRegime } from "@/lib/regime";
 import { createUnconfiguredRegimeInputs } from "@/lib/market-data/regime-inputs";
+import { getSourceRegistry } from "@/lib/market-data/source-registry";
 import { getResearchImplications } from "@/lib/playbook";
-import { observationFreshness, ObservationTable, RegimeDashboard } from "./regime-dashboard";
+import { CoreFactorReadiness, CoreSourceRegistry, observationFreshness, ObservationTable, RegimeDashboard } from "./regime-dashboard";
 
 const keys: ObservationKey[] = [
   "cpi", "coreCpi", "oil", "broadDollarIndex", "twoYearYield", "tenYearRealYield",
@@ -40,12 +41,12 @@ const labels: Record<ObservationKey, string> = {
 const scores: CategoryScore[] = [
   ["inflationPressure", "Inflation pressure", 48, "risk"],
   ["growthStress", "Growth stress", null, "risk"],
-  ["liquidity", "Liquidity", 64, "support"],
-  ["cryptoDemand", "Crypto demand", 58, "demand"],
+  ["liquidity", "Legacy Liquidity Monitor", 64, "support"],
+  ["cryptoDemand", "Bitcoin Blockspace Activity", 58, "demand"],
   ["indonesiaRisk", "Indonesia risk", 51, "risk"],
 ].map(([key, label, score, orientation]) => ({
   key: key as ScoreKey,
-  label: label as string,
+  label: label as CategoryScore["label"],
   score: score as number | null,
   coverage: score === null ? 0.35 : 1,
   coveragePercent: score === null ? 35 : 100,
@@ -89,6 +90,7 @@ function payload(): DashboardPayload {
   return {
     generatedAt: "2026-10-03T12:00:00.000Z",
     dataAsOf: "2026-10-02",
+    sourceRegistry: [],
     observations: Object.fromEntries(keys.map((key) => [key, makeObservation(key)])) as DashboardPayload["observations"],
     scores,
     regime: evaluateRegime(createUnconfiguredRegimeInputs()),
@@ -134,6 +136,27 @@ function resolvedInputs(): RegimeInputs {
 }
 
 describe("source-aware regime dashboard", () => {
+  it("separates monitoring availability from the six-factor U.S. core model", () => {
+    const markup = renderToStaticMarkup(<RegimeDashboard payload={payload()} />);
+
+    expect(markup).toContain("Monitoring indicators 9/10 available");
+    expect(markup).toContain("Core factors 0/6 classifiable");
+    expect(markup).toContain("Core data coverage");
+    expect(markup).toContain("Inflation");
+    expect(markup).toContain("Growth");
+    expect(markup).toContain("0/5 families eligible");
+    expect(markup).toContain("Labor");
+    expect(markup).toContain("Policy / Rates");
+    expect(markup).toContain("Credit Conditions");
+    expect(markup).toContain("System Liquidity Proxy");
+    expect(markup).toContain("Supplementary Monitoring — Not classifier inputs");
+    expect(markup).toContain("U.S. data do not represent the world.");
+    expect(markup).toContain("Core Model Data Quality");
+    expect(markup).toContain("Bitcoin Blockspace Activity");
+    expect(markup).toContain("Legacy Liquidity Monitor");
+    expect(markup).not.toContain("Crypto demand");
+  });
+
   it("renders withheld regimes, unavailable and excluded observations, proxy notes, and the disclaimer", () => {
     const data = payload();
     const markup = renderToStaticMarkup(<RegimeDashboard payload={data} />);
@@ -195,5 +218,75 @@ describe("source-aware regime dashboard", () => {
     expect(markup).toContain("35% indicator coverage");
     expect(markup).toContain("N/A");
     expect(markup).not.toContain("0 / 100");
+  });
+
+  it("shows factor family coverage and readiness separately from monitoring availability", () => {
+    const data = payload();
+    const inputs = resolvedInputs();
+    inputs.factors.growth = {
+      ...inputs.factors.growth,
+      coverage: 0.875,
+      eligibleFamilies: 4,
+      configuredFamilies: 5,
+    };
+    data.sourceRegistry = getSourceRegistry();
+    data.regime = evaluateRegime(inputs);
+
+    const markup = renderToStaticMarkup(<RegimeDashboard payload={data} />);
+
+    expect(markup).toContain("87.5%");
+    expect(markup).toContain("4/5 families eligible");
+    expect(markup).toContain("ADEQUATE");
+    expect(markup).toContain("Registry health");
+    expect(markup).toContain("Core factors 6/6 classifiable");
+    expect(markup).toContain("Supplementary Monitoring — Not classifier inputs");
+  });
+
+  it("lists source identifiers, terms, attribution, distinct dates, and unavailable reasons", () => {
+    const source = getSourceRegistry()[0];
+    const sources = [
+      { ...source, sourceHealth: "AVAILABLE" as const, observedAt: "2026-10-01", releasedAt: "2026-10-02T13:30:00Z", retrievedAt: "2026-10-03T12:00:00Z" },
+      ...(["STALE", "MISSING", "FAILED", "REDISTRIBUTION_BLOCKED"] as const).map((sourceHealth) => ({
+        ...source,
+        id: `fixture-${sourceHealth.toLowerCase()}`,
+        sourceHealth,
+      })),
+      getSourceRegistry().find(({ id }) => id === "treasury-real-yield")!,
+    ];
+
+    const markup = renderToStaticMarkup(<CoreSourceRegistry sources={sources} />);
+
+    expect(markup).toContain("Source ID");
+    expect(markup).toContain("Endpoint");
+    expect(markup).toContain("Reuse evidence");
+    expect(markup).toContain("Attribution");
+    expect(markup).toContain("Observation date");
+    expect(markup).toContain("Release date");
+    expect(markup).toContain("Retrieval date");
+    expect(markup).toContain("Units");
+    expect(markup).toContain("Seasonal basis");
+    expect(markup).toContain("Parser");
+    expect(markup).toContain("History");
+    expect(markup).toContain("Verified");
+    expect(markup).toContain("Cadence");
+    expect(markup).toContain("2026");
+    expect(markup).toContain("Not available");
+    expect(markup).toContain("AVAILABLE");
+    expect(markup).toContain("STALE");
+    expect(markup).toContain("MISSING");
+    expect(markup).toContain("FAILED");
+    expect(markup).toContain("REDISTRIBUTION_BLOCKED");
+    expect(markup).toContain("https://catalog.data.gov/dataset/daily-treasury-real-yield-curve-rates");
+    expect(markup).toContain("TC_10YEAR");
+  });
+
+  it("identifies configured factor families without an admitted source", () => {
+    const data = payload();
+    data.sourceRegistry = getSourceRegistry();
+
+    const markup = renderToStaticMarkup(<CoreFactorReadiness payload={data} />);
+
+    expect(markup).toContain("1 configured family has no admitted source");
+    expect(markup).toContain("Registry health");
   });
 });

@@ -50,15 +50,18 @@ treated as zero. These indicators do not substitute for classifier factors.
 
 ## U.S. Regime Framework
 
-The approved classifier has six distinct U.S. core factors: Inflation, Growth, Labor, Policy / Rates,
-Credit Conditions, and System Liquidity Proxy. Each requires registered source families, sufficient
-coverage, and supporting native comparisons. The five monitoring indicators above and the Indonesia,
-energy, and crypto context feeds are not automatically mapped into these factors.
+The classifier has six distinct U.S. core factors: Inflation, Growth, Labor, Policy / Rates, Credit
+Conditions, and System Liquidity Proxy. Registered official-source adapters now feed the factor
+engine on the server. Current observations are checked against source admission and cadence-based
+freshness rules before scoring. The five monitoring indicators above and the Indonesia, energy, and
+crypto context feeds remain isolated from these factors.
 
-The current adapters do not yet implement the required six-factor source and history contracts. As a
-result, the live app currently reports `INSUFFICIENT_DATA`, a null regime and null Regime Clarity;
-Data Quality is 0 because none of the fixed core slots is eligible. The indicator dashboard remains
-usable, but the app does not infer a regime or Research Implications from those proxy scores.
+The regime stays withheld unless the registered coverage, source-quality, and native-comparison gates
+pass. Under the approved US-MACRO-0.3.1 source amendment, Treasury `TC_10YEAR` is admitted and Policy /
+Rates is classifiable. The current assessment is `PROVISIONAL / MIXED`. The completed
+[2015–2025 CURRENT / REVISED-HISTORY DIAGNOSTIC](docs/diagnostics/2026-10-04-current-revised-history-2015-2025.md)
+contains 132 monthly snapshots. October 2025 is `NOT_EVALUATED` because the exact CPI endpoint is
+missing. This is revised-history analysis only, not point-in-time/vintage backtesting.
 
 The six labels are Goldilocks, Inflationary Expansion / Reflation, Stagflationary, Contraction /
 Recessionary, Disinflationary Slowdown, and Mixed. Rules are evaluated as an unordered set; missing
@@ -110,6 +113,9 @@ deploy. If the key is absent, the dashboard remains deployable and labels oil un
 
 After deploy, verify the homepage, `/api/market-data`, and `/api/ai-report`. Check source statuses,
 the substitute labels, and that no credential appears in either API response.
+
+Do not promote this core-integration branch to production while the source/method gate is unresolved
+or the required revised-history diagnostic remains NOT RUN.
 
 ## Checks
 
