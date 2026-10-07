@@ -943,7 +943,7 @@ function MethodView({ payload }: { payload: DashboardPayload }) {
       <Card className="border-amber-200 bg-amber-50/70 shadow-none">
         <CardContent className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center">
           <div className="flex shrink-0 items-center gap-2 text-xs font-semibold text-amber-900"><ShieldAlert className="h-4 w-4" /> Research framework</div>
-          <p className="text-xs leading-5 text-amber-900/80">Thresholds are transparent policy choices, not calibrated forecasts. No historical validation or predictive performance is claimed. Data Quality and Regime Clarity measure different things.</p>
+          <p className="text-xs leading-5 text-amber-900/80">Thresholds are transparent policy choices, not calibrated forecasts. No point-in-time/vintage backtest or predictive validation is claimed. Data Quality and Regime Clarity measure different things.</p>
         </CardContent>
       </Card>
       <Card className="border-slate-200 shadow-none">

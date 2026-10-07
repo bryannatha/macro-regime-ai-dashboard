@@ -57,11 +57,11 @@ freshness rules before scoring. The five monitoring indicators above and the Ind
 crypto context feeds remain isolated from these factors.
 
 The regime stays withheld unless the registered coverage, source-quality, and native-comparison gates
-pass. Treasury 10-year real-yield reuse remains unresolved, so the required real-financing input and
-Policy / Rates anchor remain unclassifiable; no alternate yield source is substituted. Housing also
-has no admitted source, and the approved weekly-average H.4.1 total-assets input is unavailable. The
-[current/revised-history diagnostic](docs/diagnostics/2026-10-04-current-revised-history-2015-2025.md)
-is therefore `NOT RUN` with zero snapshots. It is not a backtest or point-in-time validation.
+pass. Under the approved US-MACRO-0.3.1 source amendment, Treasury `TC_10YEAR` is admitted and Policy /
+Rates is classifiable. The current assessment is `PROVISIONAL / MIXED`. The completed
+[2015–2025 CURRENT / REVISED-HISTORY DIAGNOSTIC](docs/diagnostics/2026-10-04-current-revised-history-2015-2025.md)
+contains 132 monthly snapshots. October 2025 is `NOT_EVALUATED` because the exact CPI endpoint is
+missing. This is revised-history analysis only, not point-in-time/vintage backtesting.
 
 The six labels are Goldilocks, Inflationary Expansion / Reflation, Stagflationary, Contraction /
 Recessionary, Disinflationary Slowdown, and Mixed. Rules are evaluated as an unordered set; missing
