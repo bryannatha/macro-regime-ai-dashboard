@@ -5,12 +5,15 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "npm run verify:dol-runtime",
     "start": "next start",
     "lint": "eslint app components lib scripts --max-warnings=0",
     "test": "vitest run",
+    "verify:dol-runtime": "tsx scripts/verify-dol-runtime-package.ts",
     "diagnostic:current-revised-history": "tsx scripts/run-current-revised-diagnostic.ts"
   },
   "dependencies": {
+    "@napi-rs/canvas": "0.1.100",
     "@radix-ui/react-slot": "^1.1.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
