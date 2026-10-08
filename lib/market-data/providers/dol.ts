@@ -307,40 +307,18 @@ export function parseDolCoreClaimsReleaseText(lines: string[], retrievedAt: stri
         ? "DOL national SA weekly claims history is contiguous."
         : `The DOL weekly release supplies ${observations.length} current observations; longer history remains unavailable in the publication.`,
     };
-  } catch (error) {
-    logDolDiagnosticFailure("DOL_PARSE", error);
+  } catch {
     return unavailableReleaseClaims(retrievedAt, "FAILED", "The DOL weekly claims PDF could not be parsed.");
   }
 }
 
-// TEMPORARY: remove this exception-only instrumentation after the Netlify runtime diagnosis.
-type DolDiagnosticStage = "DOL_FETCH" | "DOL_RESPONSE" | "DOL_BODY" | "DOL_PDF_INIT" |
-  "DOL_PDF_LOAD" | "DOL_PAGE_EXTRACT" | "DOL_TEXT_EXTRACT" | "DOL_PDF_DESTROY" | "DOL_PARSE";
-
-function logDolDiagnosticFailure(stage: DolDiagnosticStage, error: unknown): void {
-  const exception = error instanceof Error ? error : null;
-  const stackLocation = exception?.stack?.split("\n").slice(1)
-    .map((line) => line.match(/[/\\]([^/\\\s()]+:\d+:\d+)\)?$/)?.[1]).find(Boolean) ?? null;
-  console.error(JSON.stringify({
-    diagnostic: "TEMPORARY_DOL",
-    stage,
-    exceptionName: exception?.name.slice(0, 80) ?? "UnknownError",
-    exceptionMessage: exception?.message.replace(/\s+/g, " ").slice(0, 500) ?? "Non-Error exception",
-    stackLocation,
-  }));
-}
-
-async function dolPdfLines(data: Uint8Array, setStage: (stage: DolDiagnosticStage) => void): Promise<string[]> {
-  setStage("DOL_PDF_INIT");
+async function dolPdfLines(data: Uint8Array): Promise<string[]> {
   const { getDocument } = await import("pdfjs-dist/legacy/build/pdf.mjs");
-  setStage("DOL_PDF_LOAD");
   const document = await getDocument({ data }).promise;
   try {
     const lines: string[] = [];
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
-      setStage("DOL_PAGE_EXTRACT");
       const page = await document.getPage(pageNumber);
-      setStage("DOL_TEXT_EXTRACT");
       const content = await page.getTextContent();
       const items = content.items.flatMap((item) => {
         if (!("str" in item) || !("transform" in item)) return [];
@@ -356,30 +334,19 @@ async function dolPdfLines(data: Uint8Array, setStage: (stage: DolDiagnosticStag
     }
     return lines;
   } finally {
-    try {
-      await document.destroy();
-    } catch (error) {
-      setStage("DOL_PDF_DESTROY");
-      throw error;
-    }
+    await document.destroy();
   }
 }
 
 export async function fetchDolCoreClaims(options: AdapterOptions = {}): Promise<CoreObservationSeriesResult> {
   const now = options.now ?? new Date();
   const retrievedAt = fetchedAtFrom(now);
-  let stage: DolDiagnosticStage = "DOL_FETCH";
   try {
     const response = await (options.fetchImpl ?? fetch)(sourceUrl, cachedFetchOptions(3600));
-    stage = "DOL_RESPONSE";
     if (!response.ok) return unavailableCoreClaims(null, "FAILED", "The DOL source returned an unsuccessful response.");
-    stage = "DOL_BODY";
-    const data = new Uint8Array(await response.arrayBuffer());
-    const lines = await dolPdfLines(data, (nextStage) => { stage = nextStage; });
-    stage = "DOL_PARSE";
+    const lines = await dolPdfLines(new Uint8Array(await response.arrayBuffer()));
     return parseDolCoreClaimsReleaseText(lines, retrievedAt);
-  } catch (error) {
-    logDolDiagnosticFailure(stage, error);
+  } catch {
     return unavailableCoreClaims(null, "FAILED", "The official DOL weekly claims release is temporarily unavailable or invalid.");
   }
 }
