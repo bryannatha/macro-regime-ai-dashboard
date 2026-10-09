@@ -2,6 +2,7 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import type {
+  AIReport,
   CategoryScore,
   DashboardPayload,
   MetricObservation,
@@ -14,7 +15,7 @@ import { evaluateRegime } from "@/lib/regime";
 import { createUnconfiguredRegimeInputs } from "@/lib/market-data/regime-inputs";
 import { getSourceRegistry } from "@/lib/market-data/source-registry";
 import { getResearchImplications } from "@/lib/playbook";
-import { CoreFactorReadiness, CoreSourceRegistry, observationFreshness, ObservationTable, RegimeDashboard } from "./regime-dashboard";
+import { chartDateTicks, CoreFactorReadiness, CoreSourceRegistry, formatChartDate, observationFreshness, ObservationTable, RegimeDashboard, ReportCard } from "./regime-dashboard";
 
 const keys: ObservationKey[] = [
   "cpi", "coreCpi", "oil", "broadDollarIndex", "twoYearYield", "tenYearRealYield",
@@ -136,6 +137,95 @@ function resolvedInputs(): RegimeInputs {
 }
 
 describe("source-aware regime dashboard", () => {
+  it("keeps the regime hero independent of factor coverage and research independent of charts", () => {
+    const data = payload();
+    data.regime = { ...evaluateRegime(resolvedInputs()), assessmentStatus: "PROVISIONAL", regime: "MIXED", dataQuality: 60, regimeClarity: 43 };
+    const markup = renderToStaticMarkup(<RegimeDashboard payload={data} />);
+    const hero = markup.match(/<section aria-label="U.S. macro regime"[^>]*>([\s\S]*?)<\/section>/)?.[1];
+    const implications = markup.match(/<section aria-label="Research implications"[^>]*>([\s\S]*?)<\/section>/)?.[1];
+
+    expect(hero).toBeDefined();
+    expect(hero).toContain("Mixed");
+    expect(hero).toContain("Provisional");
+    expect(hero).toContain("Core Model Data Quality");
+    expect(hero).toContain("Regime Clarity");
+    expect(hero).toContain("Sensitivity");
+    expect(hero).toContain("02 Oct 2026");
+    expect(hero).not.toContain("families eligible");
+    expect(implications).toContain("Mixed is the current provisional macro regime.");
+    expect(implications).not.toContain("Provider history");
+    expect(markup.indexOf("Core data coverage")).toBeGreaterThan(markup.indexOf("As of"));
+  });
+
+  it("presents six individually named factor cards without changing readings or withholding", () => {
+    const data = payload();
+    const inputs = resolvedInputs();
+    inputs.factors.growth = { ...inputs.factors.growth, coverage: 0.875, eligibleFamilies: 4, configuredFamilies: 5 };
+    inputs.factors.liquidityProxy = { ...inputs.factors.liquidityProxy, bounds: null, coverage: 0.5, eligibleFamilies: 1 };
+    data.regime = evaluateRegime(inputs);
+    const before = JSON.stringify(data);
+    const markup = renderToStaticMarkup(<RegimeDashboard payload={data} />);
+    const factors = Array.from(markup.matchAll(/<article aria-label="([^"]+)"[^>]*>([\s\S]*?)<\/article>/g));
+
+    expect(factors).toHaveLength(6);
+    expect(factors.find((match) => match[1] === "Growth")?.[2]).toContain("87.5%");
+    expect(factors.find((match) => match[1] === "Growth")?.[2]).toContain("4/5 families eligible");
+    expect(factors.find((match) => match[1] === "System Liquidity Proxy")?.[2]).toContain("WITHHELD");
+    expect(factors.find((match) => match[1] === "System Liquidity Proxy")?.[2]).toContain("50%");
+    expect(markup).toContain("NORMAL assessment quality");
+    expect(JSON.stringify(data)).toBe(before);
+  });
+
+  it("keeps brief essentials and limitations visible while retaining the complete narrative in a disclosure", () => {
+    expect(ReportCard).toBeTypeOf("function");
+    const assessment = evaluateRegime(resolvedInputs());
+    const report: AIReport = {
+      generatedAt: "2026-10-03T12:00:00Z", dataAsOf: "2026-10-02", title: "U.S. Macro Regime Brief: Mixed",
+      regime: "MIXED", assessmentStatus: "PROVISIONAL", dataQuality: 60, regimeClarity: 43,
+      leadingDirection: assessment.leadingDirection, inflationDirection: assessment.inflationDirection,
+      transitionRisk: assessment.transitionRisk, executiveSummary: "Complete technical narrative; exact original output.",
+      signals: ["Key reading: inflation 48/100."], watchlist: ["Watch the missing source release."],
+      researchImplications: null, riskNote: "Public observations may be delayed or revised. Educational research tool, not financial advice.", source: "rules-based",
+    };
+    const before = JSON.stringify(report);
+    const markup = renderToStaticMarkup(<ReportCard report={report} loading={false} error={null} onRefresh={() => {}} />);
+    const disclosure = markup.match(/<details[^>]*>[\s\S]*?<\/details>/)?.[0];
+    const visible = markup.replace(/<details[^>]*>[\s\S]*?<\/details>/g, "");
+
+    expect(disclosure).toContain("<summary");
+    expect(disclosure).toContain(report.executiveSummary);
+    expect(disclosure).not.toContain(" open=");
+    expect(visible).toContain("Mixed");
+    expect(visible).toContain("Provisional");
+    expect(visible).toContain(report.signals[0]);
+    expect(visible).toContain(report.watchlist[0]);
+    expect(visible).toContain("Data limitations");
+    expect(visible).toContain(report.riskNote);
+    expect(JSON.stringify(report)).toBe(before);
+  });
+
+  it.each([
+    ["2026-08-03", "Daily", "03 Aug 26"],
+    ["2026-08-24", "Daily", "24 Aug 26"],
+    ["2026-08-01", "Monthly", "Aug 26"],
+    ["2025-12-27", "Weekly", "27 Dec 25"],
+    ["2026-01-03T00:00:00+14:00", "Weekly", "03 Jan 26"],
+  ] as const)("uses accurate calendar chart labels for %s (%s)", (date, cadence, expected) => {
+    expect(formatChartDate).toBeTypeOf("function");
+    expect(formatChartDate(date, cadence)).toBe(expected);
+  });
+
+  it("selects legible ticks only from actual dated points without filling gaps or mutating history", () => {
+    expect(chartDateTicks).toBeTypeOf("function");
+    const history = ["2025-08-01", "2025-09-01", "2025-11-01", "2025-12-01", "2026-01-01", "2026-02-01", "2026-03-01"]
+      .map((date, index) => ({ date, value: index + 2 }));
+    const before = JSON.stringify(history);
+    expect(chartDateTicks(history)).toEqual(["2025-08-01", "2025-11-01", "2026-01-01", "2026-03-01"]);
+    expect(chartDateTicks([])).toEqual([]);
+    expect(chartDateTicks(history.slice(0, 2))).toEqual(["2025-08-01", "2025-09-01"]);
+    expect(JSON.stringify(history)).toBe(before);
+  });
+
   it("separates monitoring availability from the six-factor U.S. core model", () => {
     const markup = renderToStaticMarkup(<RegimeDashboard payload={payload()} />);
 
