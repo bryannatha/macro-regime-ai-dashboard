@@ -169,15 +169,18 @@ export function observationFreshness(observation: MetricObservation, referenceTi
 
 function formatDate(value: string | null, includeTime = false): string {
   if (!value) return "Not available";
-  const date = new Date(value.length === 10 ? `${value}T00:00:00Z` : value);
+  const hasTime = includeTime && value.length > 10;
+  // Reference dates keep their calendar component; only actual instants convert to WIB.
+  const date = new Date(hasTime ? value : `${value.slice(0, 10)}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return "Not available";
-  return new Intl.DateTimeFormat("en-GB", {
+  const formatted = new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
     month: "short",
     year: "numeric",
-    ...(includeTime ? { hour: "2-digit", minute: "2-digit" } : {}),
-    timeZone: "Asia/Jakarta",
+    ...(hasTime ? { hour: "2-digit", minute: "2-digit" } : {}),
+    timeZone: hasTime ? "Asia/Jakarta" : "UTC",
   }).format(date);
+  return hasTime ? `${formatted} WIB` : formatted;
 }
 
 function formatValue(observation: MetricObservation): string {
@@ -337,7 +340,7 @@ export function RegimeDashboard({ payload }: RegimeDashboardProps) {
           <div className="flex items-center gap-2 sm:gap-4">
             <div className="hidden text-right sm:block">
               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Data checked</div>
-              <div className="tabular mt-0.5 text-xs font-medium text-slate-700">{formatDate(payload.generatedAt, true)} WIB</div>
+              <div className="tabular mt-0.5 text-xs font-medium text-slate-700">{formatDate(payload.generatedAt, true)}</div>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-1.5">
               <Badge aria-label={`${counts.available} of ${counts.total} monitoring indicators available`} variant={counts.available > 0 ? "positive" : "caution"} className="whitespace-nowrap">
@@ -552,6 +555,19 @@ function ScoreCard({ score }: { score: CategoryScore }) {
 
 function ResearchImplicationsCard({ payload }: { payload: DashboardPayload }) {
   const implications = payload.researchImplications;
+  const { assessmentStatus, regime } = payload.regime;
+  const withheldDescription = assessmentStatus === "INSUFFICIENT_DATA"
+    ? "Mandatory evidence requirements are not met and no regime is assigned."
+    : regime
+      ? `${REGIME_LABELS[regime]} is the current ${assessmentStatus === "PROVISIONAL" ? "provisional " : ""}macro regime.`
+      : "No regime could be established from the admissible evidence.";
+  const withheldReason = assessmentStatus === "INSUFFICIENT_DATA"
+    ? "Research implications are withheld until the required evidence is available."
+    : assessmentStatus === "PROVISIONAL"
+      ? regime
+        ? "Research implications are withheld because the assessment does not meet NORMAL-quality requirements."
+        : "Research implications remain withheld while the assessment is provisional."
+      : "Research implications are not available for this assessment.";
   return (
     <Card className="border-slate-200 shadow-none">
       <CardHeader className="pb-3">
@@ -560,7 +576,7 @@ function ResearchImplicationsCard({ payload }: { payload: DashboardPayload }) {
           <CardTitle className="text-sm">Research Implications</CardTitle>
           {implications && <Badge variant="outline" className="ml-auto text-[10px]">{REGIME_LABELS[implications.regime]}</Badge>}
         </div>
-        <CardDescription>{implications?.thesis ?? "Withheld until a core regime is resolved. Existing monitor scores and overlays are not classifier inputs."}</CardDescription>
+        <CardDescription>{implications?.thesis ?? withheldDescription}</CardDescription>
       </CardHeader>
       <CardContent>
         {implications ? (
@@ -573,7 +589,7 @@ function ResearchImplicationsCard({ payload }: { payload: DashboardPayload }) {
           </div>
         ) : (
           <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-5 text-center text-xs text-slate-500">
-            No regime is assigned from the available feeds. No implication is inferred from missing data.
+            {withheldReason}
           </div>
         )}
         <p className="mt-4 border-t border-slate-100 pt-3 text-[10px] leading-4 text-slate-400">Descriptive research questions and limitations only; no asset allocation or trading instructions.</p>
@@ -632,7 +648,7 @@ function ReportCard({
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={report.regime ? "positive" : "caution"}>{report.regime ? REGIME_LABELS[report.regime] : "Regime withheld"}</Badge>
-                <span className="text-[10px] text-slate-400">Generated {formatDate(report.generatedAt, true)} WIB</span>
+                <span className="text-[10px] text-slate-400">Generated {formatDate(report.generatedAt, true)}</span>
               </div>
               <h3 className="mt-2 text-sm font-semibold text-slate-800">{report.title}</h3>
               <p className="mt-1.5 text-xs leading-5 text-slate-600">{report.executiveSummary}</p>
@@ -840,7 +856,7 @@ export function ObservationTable({ payload }: { payload: DashboardPayload }) {
                     <div className="text-xs font-medium text-slate-800">{observation.label}</div>
                     <div className="mt-0.5 text-[10px] text-slate-400">{observation.unit}</div>
                     <div className="mt-1 text-[9px] leading-4 text-slate-500 md:hidden">{observation.source}. {observation.detail}</div>
-                    <div className="mt-1 text-[9px] leading-4 text-slate-400 sm:hidden">As of {formatDate(observation.observedAt)} · {observation.cadence}</div>
+                    <div className="mt-1 text-[9px] leading-4 text-slate-400 sm:hidden">As of {formatDate(observation.observedAt, observation.cadence === "Current")} · {observation.cadence}</div>
                   </TableCell>
                   <TableCell className="hidden max-w-[380px] py-3 md:table-cell">
                     <div className="text-[10px] font-medium text-slate-600">
@@ -849,11 +865,11 @@ export function ObservationTable({ payload }: { payload: DashboardPayload }) {
                       ) : observation.source}
                     </div>
                     <div className="mt-1 text-[10px] leading-4 text-slate-400">{observation.detail}</div>
-                    <div className="mt-1 text-[9px] text-slate-400">Retrieved {formatDate(observation.fetchedAt, true)} WIB</div>
+                    <div className="mt-1 text-[9px] text-slate-400">Retrieved {formatDate(observation.fetchedAt, true)}</div>
                   </TableCell>
                   <TableCell className="hidden py-3 text-[10px] text-slate-500 lg:table-cell">{observation.cadence}</TableCell>
                   <TableCell className="tabular whitespace-nowrap px-2 py-3 text-right font-mono text-xs font-medium text-slate-800 sm:px-3">{formatValue(observation)}</TableCell>
-                  <TableCell className="hidden py-3 text-right text-[10px] text-slate-500 sm:table-cell">{formatDate(observation.observedAt)}</TableCell>
+                  <TableCell className="hidden py-3 text-right text-[10px] text-slate-500 sm:table-cell">{formatDate(observation.observedAt, observation.cadence === "Current")}</TableCell>
                   <TableCell className="whitespace-nowrap px-2 py-3 text-right sm:px-3"><FreshnessBadge freshness={freshness} /></TableCell>
                 </TableRow>
               );

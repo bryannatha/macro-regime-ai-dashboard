@@ -196,20 +196,39 @@ describe("source-aware regime dashboard", () => {
     expect(observationFreshness(makeObservation("goldPrice"), reference)).toBe("excluded");
   });
 
-  it("shows research implications only when a regime is resolved", () => {
+  it.each([
+    ["PROVISIONAL", "MIXED", "Mixed is the current provisional macro regime.", "Research implications are withheld because the assessment does not meet NORMAL-quality requirements."],
+    ["PROVISIONAL", null, "No regime could be established from the admissible evidence.", "Research implications remain withheld while the assessment is provisional."],
+    ["INSUFFICIENT_DATA", null, "Mandatory evidence requirements are not met and no regime is assigned.", "Research implications are withheld until the required evidence is available."],
+  ] as const)("explains withheld research implications for %s / %s", (assessmentStatus, regime, description, reason) => {
     const data = payload();
-    expect(renderToStaticMarkup(<RegimeDashboard payload={data} />)).toContain("Withheld until a core regime is resolved");
-
-    data.regime = evaluateRegime(resolvedInputs());
-    data.researchImplications = getResearchImplications("GOLDILOCKS");
+    data.regime = { ...data.regime, assessmentStatus, regime };
+    const before = JSON.stringify(data);
     const markup = renderToStaticMarkup(<RegimeDashboard payload={data} />);
 
+    expect(markup).toContain(description);
+    expect(markup).toContain(reason);
+    expect(markup).not.toContain("No regime is assigned from the available feeds.");
+    expect(markup).not.toContain("Research themes");
+    expect(JSON.stringify(data)).toBe(before);
+  });
+
+  it("preserves research implications for NORMAL with an assigned regime", () => {
+    const data = payload();
+    data.regime = evaluateRegime(resolvedInputs());
+    data.researchImplications = getResearchImplications("GOLDILOCKS");
+    const before = JSON.stringify(data);
+    const markup = renderToStaticMarkup(<RegimeDashboard payload={data} />);
+
+    expect(data.regime.assessmentStatus).toBe("NORMAL");
     expect(markup).toContain("Goldilocks");
+    expect(markup).toContain(data.researchImplications!.thesis);
     expect(markup).toContain("Research themes");
     expect(markup).toContain("Counter-signals");
     expect(markup).not.toContain("Asset playbook");
     expect(markup).not.toContain("Research areas to favor");
     expect(markup).not.toContain("Research areas to reduce");
+    expect(JSON.stringify(data)).toBe(before);
   });
 
   it("shows a score's coverage and uses N/A rather than zero when withheld", () => {
@@ -288,5 +307,58 @@ describe("source-aware regime dashboard", () => {
 
     expect(markup).toContain("1 configured family has no admitted source");
     expect(markup).toContain("Registry health");
+  });
+
+  it.each([
+    "2026-10-01",
+    "2026-10-01T00:00:00.000Z",
+    "2026-10-01T00:00:00+14:00",
+    "2026-10-01T23:30:00-12:00",
+  ])("preserves the reference calendar date for %s", (observedAt) => {
+    const source = { ...getSourceRegistry()[0], observedAt, releasedAt: null, retrievedAt: null, verifiedAt: null };
+    const before = JSON.stringify(source);
+    const markup = renderToStaticMarkup(<CoreSourceRegistry sources={[source]} />);
+
+    expect(markup).toContain("01 Oct 2026");
+    expect(markup).not.toContain("30 Sept 2026");
+    expect(markup).not.toContain("02 Oct 2026");
+    expect(markup).not.toContain("07:00");
+    expect(JSON.stringify(source)).toBe(before);
+  });
+
+  it("does not invent a clock time for a date-only release", () => {
+    const source = { ...getSourceRegistry()[0], observedAt: null, releasedAt: "2026-10-08", retrievedAt: null, verifiedAt: null };
+    const markup = renderToStaticMarkup(<CoreSourceRegistry sources={[source]} />);
+
+    expect(markup).toContain("08 Oct 2026");
+    expect(markup).not.toContain("07:00");
+    expect(markup).not.toContain("WIB");
+  });
+
+  it.each([
+    ["2026-10-02T13:30:00Z", "02 Oct 2026, 20:30 WIB"],
+    ["2026-10-02T00:00:00Z", "02 Oct 2026, 07:00 WIB"],
+    ["2026-10-02T23:30:00Z", "03 Oct 2026, 06:30 WIB"],
+    ["2026-10-02T13:30:00+07:00", "02 Oct 2026, 13:30 WIB"],
+  ])("preserves and labels the release instant %s", (releasedAt, expected) => {
+    const source = { ...getSourceRegistry()[0], observedAt: null, releasedAt, retrievedAt: null, verifiedAt: null };
+    const markup = renderToStaticMarkup(<CoreSourceRegistry sources={[source]} />);
+
+    expect(markup).toContain(expected);
+  });
+
+  it("keeps the genuine retrieval timestamp and its WIB conversion", () => {
+    const source = { ...getSourceRegistry()[0], observedAt: null, releasedAt: null, retrievedAt: "2026-10-03T12:00:00Z", verifiedAt: null };
+    const markup = renderToStaticMarkup(<CoreSourceRegistry sources={[source]} />);
+
+    expect(markup).toContain("03 Oct 2026, 19:00 WIB");
+  });
+
+  it("shows the actual time for Current monitoring observations", () => {
+    const data = payload();
+    data.observations.mempoolVsize.observedAt = "2026-10-02T23:30:00Z";
+    const markup = renderToStaticMarkup(<ObservationTable payload={data} />);
+
+    expect(markup).toContain("03 Oct 2026, 06:30 WIB");
   });
 });
