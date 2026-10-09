@@ -119,11 +119,13 @@ const inputNames: Record<ObservationKey, string> = {
   stablecoinMarketCap: "Stablecoin market cap (excluded)",
 };
 
-const tooltipStyle = {
+const tooltipStyle: React.CSSProperties = {
   borderRadius: "8px",
   borderColor: "#dbe3e8",
   boxShadow: "0 12px 30px rgba(15, 23, 42, 0.1)",
   fontSize: "12px",
+  maxWidth: "260px",
+  whiteSpace: "normal",
 };
 
 const regimeFactorOrder: RegimeFactorKey[] = [
@@ -207,12 +209,19 @@ function formatBound(value: number): string {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(value);
 }
 
-function formatPeriod(value: string): string {
-  return new Intl.DateTimeFormat("en-US", {
+export function formatChartDate(value: string, cadence: MetricObservation["cadence"]): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    ...(cadence !== "Monthly" ? { day: "2-digit" } : {}),
     month: "short",
     year: "2-digit",
     timeZone: "UTC",
   }).format(new Date(`${value.slice(0, 10)}T00:00:00Z`));
+}
+
+export function chartDateTicks(history: MetricObservation["history"]): string[] {
+  const count = Math.min(4, history.length);
+  return Array.from(new Set(Array.from({ length: count }, (_, index) =>
+    history[Math.round(index * (history.length - 1) / Math.max(1, count - 1))].date)));
 }
 
 function sourceCount(payload: DashboardPayload): { available: number; total: number; excluded: number } {
@@ -327,22 +336,22 @@ export function RegimeDashboard({ payload }: RegimeDashboardProps) {
       : "Transparent, provisional rules; missing inputs are never scored as zero.";
 
   return (
-    <div className="min-h-screen bg-[#f4f7f8] text-slate-900">
+    <div className="macro-dashboard min-h-screen bg-[#f4f7f8] text-slate-900">
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex min-h-[72px] max-w-[1440px] items-center justify-between gap-4 px-4 sm:px-6 xl:px-8">
+        <div className="mx-auto grid max-w-[1440px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 px-4 py-3 sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto_auto] xl:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-950 text-xs font-bold text-white">MR</div>
             <div className="min-w-0">
-              <h1 className="truncate text-sm font-semibold tracking-tight">Macro Regime AI Dashboard</h1>
+              <h1 className="text-sm font-semibold leading-5 tracking-tight">Macro Regime AI Dashboard</h1>
               <p className="mt-0.5 hidden text-[11px] text-slate-500 sm:block">Daily macro monitor · public sources · read only</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 sm:gap-4">
-            <div className="hidden text-right sm:block">
+          <div className="col-span-2 row-start-2 flex flex-wrap items-center gap-2 sm:gap-4 lg:col-span-1 lg:col-start-2 lg:row-start-1">
+            <div className="text-left lg:text-right">
               <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Data checked</div>
               <div className="tabular mt-0.5 text-xs font-medium text-slate-700">{formatDate(payload.generatedAt, true)}</div>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <div className="flex flex-wrap items-center gap-1.5">
               <Badge aria-label={`${counts.available} of ${counts.total} monitoring indicators available`} variant={counts.available > 0 ? "positive" : "caution"} className="whitespace-nowrap">
                 Monitoring indicators {counts.available}/{counts.total} available
               </Badge>
@@ -350,11 +359,11 @@ export function RegimeDashboard({ payload }: RegimeDashboardProps) {
                 Core factors {coreFactors.classifiable}/{coreFactors.total} classifiable
               </Badge>
             </div>
-            <Button aria-label="Refresh dashboard data" onClick={() => window.location.reload()} size="sm" variant="outline">
-              <RefreshCw className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Refresh</span>
-            </Button>
           </div>
+          <Button aria-label="Refresh dashboard data" className="col-start-2 row-start-1 lg:col-start-3" onClick={() => window.location.reload()} size="sm" variant="outline">
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Refresh</span>
+          </Button>
         </div>
         <nav aria-label="Dashboard sections" className="mx-auto flex max-w-[1440px] gap-1 overflow-x-auto px-3 sm:px-6 xl:px-8">
           {navigation.map(({ id, label, icon: Icon }) => (
@@ -435,8 +444,7 @@ function OverviewView({
           {payload.scores.map((score) => <ScoreCard key={score.key} score={score} />)}
         </div>
       </section>
-      <section className="grid gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-        <ObservationCharts observations={payload.observations} />
+      <section aria-label="Research implications">
         <ResearchImplicationsCard payload={payload} />
       </section>
       <ReportCard
@@ -445,6 +453,7 @@ function OverviewView({
         onRefresh={onRefreshReport}
         report={report}
       />
+      <ObservationCharts observations={payload.observations} />
     </>
   );
 }
@@ -454,12 +463,13 @@ function RegimeSummary({ payload }: { payload: DashboardPayload }) {
   const selectedRegime = assessment.regime;
   const resolved = selectedRegime !== null;
   return (
-    <section className="grid gap-4 xl:grid-cols-[1.25fr_0.75fr]">
+    <>
+    <section aria-label="U.S. macro regime">
       <Card className={cn(
         "overflow-hidden border-slate-800 bg-slate-950 text-white shadow-none",
         !resolved && "border-amber-300 bg-amber-50 text-slate-900",
       )}>
-        <div className="grid gap-6 p-5 sm:grid-cols-[1fr_auto] sm:items-center sm:p-6">
+        <div className="grid gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-center lg:gap-10 lg:p-7">
           <div>
             <div className="mb-3 flex flex-wrap items-center gap-2">
               <span className={cn("text-[10px] font-semibold uppercase tracking-[0.18em]", resolved ? "text-teal-300" : "text-amber-800")}>U.S. macro regime</span>
@@ -467,7 +477,7 @@ function RegimeSummary({ payload }: { payload: DashboardPayload }) {
                 {assessmentStatusLabels[assessment.assessmentStatus]}
               </Badge>
             </div>
-            <h3 className="text-3xl font-semibold tracking-tight sm:text-[34px]">
+            <h3 className="text-3xl font-semibold tracking-tight sm:text-[40px] sm:leading-tight">
               {selectedRegime ? REGIME_LABELS[selectedRegime] : "Regime withheld"}
             </h3>
             <p className={cn("mt-3 max-w-2xl text-sm leading-6", resolved ? "text-slate-300" : "text-slate-700")}>
@@ -476,16 +486,16 @@ function RegimeSummary({ payload }: { payload: DashboardPayload }) {
                 : "The six approved core factors are not source-mapped with sufficient coverage yet. The monitoring indicators below are not substitutes, so no regime is assigned."}
             </p>
           </div>
-          <div className={cn("grid min-w-[220px] grid-cols-2 gap-2 rounded-md border p-3", resolved ? "border-white/10 bg-white/[0.04]" : "border-amber-200 bg-white/70")}>
+          <div className={cn("grid min-w-0 grid-cols-2 gap-4 rounded-lg border p-4", resolved ? "border-white/10 bg-white/[0.04]" : "border-amber-200 bg-white/70")}>
             <div>
-              <div className={cn("text-[9px] font-medium uppercase tracking-[0.12em]", resolved ? "text-slate-400" : "text-amber-800")}>Core Model Data Quality</div>
-              <div className="tabular mt-1 font-mono text-2xl font-semibold">{assessment.dataQuality ?? "N/A"}<span className="text-xs text-slate-400"> / 100</span></div>
+              <div className={cn("text-[10px] font-medium uppercase tracking-[0.1em]", resolved ? "text-slate-400" : "text-amber-800")}>Core Model Data Quality</div>
+              <div className="tabular mt-2 font-mono text-3xl font-semibold">{assessment.dataQuality ?? "N/A"}<span className="text-xs text-slate-400"> / 100</span></div>
             </div>
             <div>
-              <div className={cn("text-[9px] font-medium uppercase tracking-[0.12em]", resolved ? "text-slate-400" : "text-amber-800")}>Regime Clarity</div>
-              <div className="tabular mt-1 font-mono text-2xl font-semibold">{assessment.regimeClarity ?? "N/A"}<span className="text-xs text-slate-400"> / 100</span></div>
+              <div className={cn("text-[10px] font-medium uppercase tracking-[0.1em]", resolved ? "text-slate-400" : "text-amber-800")}>Regime Clarity</div>
+              <div className="tabular mt-2 font-mono text-3xl font-semibold">{assessment.regimeClarity ?? "N/A"}<span className="text-xs text-slate-400"> / 100</span></div>
             </div>
-            <div className={cn("col-span-2 border-t pt-2 text-[9px] leading-4", resolved ? "border-white/10 text-slate-400" : "border-amber-200 text-slate-500")}>
+            <div className={cn("col-span-2 border-t pt-2 text-[10px] leading-4", resolved ? "border-white/10 text-slate-400" : "border-amber-200 text-slate-500")}>
               Separate measures; clarity is not probability or confidence.
             </div>
           </div>
@@ -496,34 +506,38 @@ function RegimeSummary({ payload }: { payload: DashboardPayload }) {
         </div>
       </Card>
 
-      <Card className="border-slate-200 shadow-none">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between gap-3">
-            <CardTitle className="text-sm">Core data coverage</CardTitle>
-            <Badge variant="outline" className="text-[10px]">60% + 2 families</Badge>
+    </section>
+      <section aria-labelledby="core-data-coverage-title" className="space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="max-w-4xl">
+            <h3 className="text-sm font-semibold text-slate-800" id="core-data-coverage-title">Core data coverage</h3>
+            <p className="mt-1 text-xs leading-5 text-slate-500">U.S. data do not represent the world. Only the six U.S. core factors classify the regime; Indonesia FX, Energy, and Crypto remain separate overlays.</p>
+            <p className="mt-1 text-[11px] text-slate-500">Classifiability is separate from NORMAL assessment quality. Source and eligibility details are in Data &amp; sources.</p>
           </div>
-          <CardDescription>U.S. data do not represent the world. Only the six U.S. core factors classify the regime; Indonesia FX, Energy, and Crypto remain separate overlays.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
+          <Badge variant="outline" className="text-[10px]">60% + 2 families</Badge>
+        </div>
+        <div className="grid items-start gap-3 md:grid-cols-2 lg:grid-cols-3">
           {regimeFactorOrder.map((key) => {
             const factor = assessment.factorReadiness[key];
             const sources = sourcesForFactor(payload, key);
             return (
-              <div className="rounded border border-slate-100 bg-slate-50/60 px-3 py-2" key={key}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="min-w-0 truncate text-xs font-medium text-slate-700">{regimeFactorLabels[key]}</span>
-                  <Badge variant={readinessVariant(factor.status)} className="text-[9px]">{factor.status}</Badge>
+              <article aria-label={regimeFactorLabels[key]} className="min-w-0 rounded-lg border border-slate-200 bg-white p-4" key={key}>
+                <div className="flex items-start justify-between gap-3">
+                  <h4 className="text-sm font-semibold leading-5 text-slate-800">{regimeFactorLabels[key]}</h4>
+                  <Badge variant={readinessVariant(factor.status)} className="shrink-0 text-[10px]">{factor.status}</Badge>
                 </div>
-                <div className="mt-1 text-[10px] text-slate-500">
-                  {formatCoverage(factor.coverage)} coverage · {factor.eligibleFamilies}/{factor.configuredFamilies} families eligible
+                <div className="mt-4 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                  <span className="tabular font-mono text-2xl font-semibold tracking-tight text-slate-950">{formatCoverage(factor.coverage)}</span>
+                  <span className="text-xs text-slate-500">coverage</span>
                 </div>
-                <div className="mt-0.5 text-[9px] text-slate-400">Registry health: {sourceHealthSummary(sources)}</div>
-              </div>
+                <div className="mt-2 text-xs text-slate-600">{factor.eligibleFamilies}/{factor.configuredFamilies} families eligible</div>
+                <div className="mt-3 border-t border-slate-100 pt-2 text-[11px] leading-4 text-slate-500">Registry health: {sourceHealthSummary(sources)}</div>
+              </article>
             );
           })}
-        </CardContent>
-      </Card>
+        </div>
     </section>
+    </>
   );
 }
 
@@ -535,9 +549,9 @@ function ScoreCard({ score }: { score: CategoryScore }) {
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-2">
           <div className={cn("rounded-md p-2", theme.icon)}><Icon className="h-3.5 w-3.5" /></div>
-          <Badge variant={score.score === null ? "caution" : "outline"} className="max-w-[130px] truncate text-[9px]">{score.reading}</Badge>
+          <Badge variant={score.score === null ? "caution" : "outline"} className="text-[10px]">{score.reading}</Badge>
         </div>
-        <div className="mt-3 truncate text-xs font-medium text-slate-600">{score.label}</div>
+        <div className="mt-3 text-xs font-medium leading-5 text-slate-600">{score.label}</div>
         <div className="mt-1 flex items-baseline gap-1.5">
           <span className="tabular font-mono text-[27px] font-semibold tracking-tight text-slate-950">{score.score ?? "N/A"}</span>
           {score.score !== null && <span className="text-[10px] text-slate-400">/ 100</span>}
@@ -545,7 +559,7 @@ function ScoreCard({ score }: { score: CategoryScore }) {
         <div className="mt-2 h-1 overflow-hidden rounded-full bg-slate-100">
           {score.score !== null && <div className={cn("h-full rounded-full", theme.bar)} style={{ width: `${score.score}%` }} />}
         </div>
-        <p className="mt-2 min-h-[30px] text-[10px] leading-[15px] text-slate-500" title={score.explanation}>
+        <p className="mt-2 text-[10px] leading-[15px] text-slate-500" title={score.explanation}>
           {score.coveragePercent}% indicator coverage · monitoring only
         </p>
       </CardContent>
@@ -570,15 +584,15 @@ function ResearchImplicationsCard({ payload }: { payload: DashboardPayload }) {
       : "Research implications are not available for this assessment.";
   return (
     <Card className="border-slate-200 shadow-none">
-      <CardHeader className="pb-3">
+      <CardHeader className="p-5 pb-3">
         <div className="flex items-center gap-2">
           <Activity className="h-4 w-4 text-teal-700" />
           <CardTitle className="text-sm">Research Implications</CardTitle>
           {implications && <Badge variant="outline" className="ml-auto text-[10px]">{REGIME_LABELS[implications.regime]}</Badge>}
         </div>
-        <CardDescription>{implications?.thesis ?? withheldDescription}</CardDescription>
+        <CardDescription className="text-xs leading-5">{implications?.thesis ?? withheldDescription}</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-5 pb-4">
         {implications ? (
           <div className="grid gap-3 sm:grid-cols-2">
             <ResearchGroup label="Research themes" items={implications.researchThemes} />
@@ -588,11 +602,11 @@ function ResearchImplicationsCard({ payload }: { payload: DashboardPayload }) {
             <ResearchGroup label="Guardrails" items={implications.guardrails} />
           </div>
         ) : (
-          <div className="rounded-md border border-dashed border-slate-300 bg-slate-50 px-3 py-5 text-center text-xs text-slate-500">
+          <div className="border-l-2 border-amber-300 pl-3 text-xs leading-5 text-slate-600">
             {withheldReason}
           </div>
         )}
-        <p className="mt-4 border-t border-slate-100 pt-3 text-[10px] leading-4 text-slate-400">Descriptive research questions and limitations only; no asset allocation or trading instructions.</p>
+        <p className="mt-3 text-[11px] leading-4 text-slate-500">Descriptive research questions and limitations only; no asset allocation or trading instructions.</p>
       </CardContent>
     </Card>
   );
@@ -616,7 +630,7 @@ function ResearchGroup({
   );
 }
 
-function ReportCard({
+export function ReportCard({
   error,
   loading,
   onRefresh,
@@ -629,42 +643,49 @@ function ReportCard({
 }) {
   return (
     <Card className="border-slate-200 shadow-none">
-      <CardHeader className="flex-row items-start justify-between space-y-0 pb-3">
-        <div>
+      <CardHeader className="flex-row flex-wrap items-start justify-between gap-3 space-y-0 p-5 pb-4">
+        <div className="min-w-0">
           <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-teal-700" /><CardTitle className="text-sm">Daily rules brief</CardTitle></div>
-          <CardDescription className="mt-1">Deterministic rules output; not AI-generated.</CardDescription>
+          <CardDescription className="mt-1 text-xs">Deterministic rules output; not AI-generated.</CardDescription>
         </div>
         <Button disabled={loading} onClick={onRefresh} size="sm" variant="outline">
           <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} /> Refresh brief
         </Button>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-5 pb-5">
         {loading ? (
           <p className="rounded-md bg-slate-50 p-4 text-xs text-slate-500">Loading the current coverage-aware brief…</p>
         ) : error ? (
           <p className="rounded-md border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</p>
         ) : report ? (
-          <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
-            <div>
+          <div className="space-y-4">
+            <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant={report.regime ? "positive" : "caution"}>{report.regime ? REGIME_LABELS[report.regime] : "Regime withheld"}</Badge>
-                <span className="text-[10px] text-slate-400">Generated {formatDate(report.generatedAt, true)}</span>
+                <Badge variant="outline">{assessmentStatusLabels[report.assessmentStatus]}</Badge>
+                <span className="text-[11px] text-slate-500 sm:ml-auto">Generated {formatDate(report.generatedAt, true)}</span>
               </div>
               <h3 className="mt-2 text-sm font-semibold text-slate-800">{report.title}</h3>
-              <p className="mt-1.5 text-xs leading-5 text-slate-600">{report.executiveSummary}</p>
-              <p className="mt-3 text-[10px] text-slate-400">
-                Latest input date: {formatDate(report.dataAsOf)} · {assessmentStatusLabels[report.assessmentStatus]} · Core Model Data Quality {report.dataQuality ?? "N/A"}/100 · Regime Clarity {report.regimeClarity ?? "N/A"}/100
+              <p className="mt-2 text-[11px] leading-5 text-slate-500">
+                Latest input date: {formatDate(report.dataAsOf)} · Core Model Data Quality {report.dataQuality ?? "N/A"}/100 · Regime Clarity {report.regimeClarity ?? "N/A"}/100
               </p>
             </div>
-            <div className="grid content-start gap-4 sm:grid-cols-2">
+            <div className="grid items-start gap-5 md:grid-cols-2">
               <ReportList items={report.signals} label="Key readings" />
               <ReportList items={report.watchlist} label="Watchlist" />
             </div>
+            <details className="rounded-lg border border-slate-200">
+              <summary className="cursor-pointer px-4 py-3 text-xs font-semibold text-slate-700">Full rules narrative</summary>
+              <p className="border-t border-slate-100 px-4 py-3 text-xs leading-6 text-slate-600">{report.executiveSummary}</p>
+            </details>
           </div>
         ) : null}
-        <p className="mt-4 border-t border-slate-100 pt-3 text-[10px] leading-4 text-slate-400">
-          {report?.riskNote ?? "Rules-generated research context, not a forecast. Educational research tool, not financial advice."}
-        </p>
+        <div className="mt-4 border-t border-slate-100 pt-4">
+          <h4 className="text-xs font-semibold text-slate-700">Data limitations</h4>
+          <p className="mt-1.5 text-xs leading-5 text-slate-500">
+            {report?.riskNote ?? "Rules-generated research context, not a forecast. Educational research tool, not financial advice."}
+          </p>
+        </div>
       </CardContent>
     </Card>
   );
@@ -672,10 +693,10 @@ function ReportCard({
 
 function ReportList({ items, label }: { items: string[]; label: string }) {
   return (
-    <div>
-      <h4 className="mb-2 text-[9px] font-semibold uppercase tracking-[0.15em] text-slate-400">{label}</h4>
+    <div className="min-w-0">
+      <h4 className="mb-3 text-xs font-semibold text-slate-800">{label}</h4>
       <ul className="space-y-2">
-        {items.length ? items.map((item) => <li className="flex gap-2 text-[10px] leading-4 text-slate-600" key={item}><span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-teal-600" />{item}</li>) : <li className="text-[10px] text-slate-400">No items available.</li>}
+        {items.length ? items.map((item) => <li className="flex gap-2 text-xs leading-5 text-slate-600" key={item}><span aria-hidden="true" className="mt-2 h-1 w-1 shrink-0 rounded-full bg-teal-600" /><span>{item}</span></li>) : <li className="text-xs text-slate-500">No items available.</li>}
       </ul>
     </div>
   );
@@ -897,16 +918,16 @@ function ObservationCharts({ observations }: { observations: DashboardPayload["o
     .map((key) => observations[key])
     .filter((observation) => observation.status === "available" && observation.history.length >= 2);
   return (
-    <section>
-      <div className="mb-3 flex items-end justify-between gap-3">
+    <section aria-labelledby="provider-history-title" className="min-w-0">
+      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold text-slate-800">Provider history</h3>
+          <h3 className="text-sm font-semibold text-slate-800" id="provider-history-title">Provider history</h3>
           <p className="mt-1 text-[11px] text-slate-500">Only dated observations returned by the source are charted. No synthetic score history.</p>
         </div>
         <Badge variant="outline" className="text-[10px]">{chartable.length} series with history</Badge>
       </div>
       {chartable.length ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid items-start gap-3 md:grid-cols-2 lg:grid-cols-3">
           {chartable.map((observation) => <ObservationChart key={observation.key} observation={observation} />)}
         </div>
       ) : (
@@ -919,24 +940,22 @@ function ObservationCharts({ observations }: { observations: DashboardPayload["o
 }
 
 function ObservationChart({ observation }: { observation: MetricObservation }) {
-  const history = observation.history.slice(-60).map((point) => ({
-    ...point,
-    period: formatPeriod(point.date),
-  }));
+  const history = observation.history.slice(-60);
   const color = chartColors[observation.key] ?? "#0f9b8e";
   return (
-    <Card className="border-slate-200 shadow-none">
-      <CardHeader className="pb-1">
-        <CardTitle className="text-xs">{observation.label}</CardTitle>
-        <CardDescription>{observation.unit} · {history.length} dated points</CardDescription>
+    <Card className="min-w-0 border-slate-200 shadow-none">
+      <CardHeader className="p-4 pb-1">
+        <CardTitle className="text-sm leading-5">{observation.label}</CardTitle>
+        <CardDescription className="text-[11px] leading-4">{observation.unit} · {observation.cadence} · {history.length} dated points</CardDescription>
+        <p className="text-[10px] leading-4 text-slate-500">{formatDate(history[0].date)} – {formatDate(history[history.length - 1].date)}</p>
       </CardHeader>
-      <CardContent className="pt-2">
-        <ResponsiveContainer height={150} width="100%">
-          <LineChart data={history} margin={{ left: -22, right: 4, top: 5, bottom: 0 }}>
+      <CardContent className="px-3 pb-3 pt-3">
+        <ResponsiveContainer height={190} width="100%">
+          <LineChart data={history} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
             <CartesianGrid stroke="#e8edf0" strokeDasharray="3 4" vertical={false} />
-            <XAxis axisLine={false} dataKey="period" fontSize={9} tickLine={false} tick={{ fill: "#94a3b8" }} />
-            <YAxis axisLine={false} fontSize={9} tickLine={false} tick={{ fill: "#94a3b8" }} width={42} />
-            <Tooltip contentStyle={tooltipStyle} formatter={(value) => [`${value} ${observation.unit}`, observation.label]} />
+            <XAxis axisLine={false} dataKey="date" fontSize={10} height={32} minTickGap={16} tickMargin={10} tickLine={false} tick={{ fill: "#64748b" }} ticks={chartDateTicks(history)} tickFormatter={(date) => formatChartDate(String(date), observation.cadence)} />
+            <YAxis axisLine={false} fontSize={10} tickLine={false} tick={{ fill: "#64748b" }} width={44} tickFormatter={(value) => new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(Number(value))} />
+            <Tooltip contentStyle={tooltipStyle} itemStyle={{ whiteSpace: "normal" }} labelFormatter={(date) => formatDate(String(date))} formatter={(value) => [`${value} ${observation.unit}`, observation.label]} />
             <Line dataKey="value" dot={false} name={observation.label} stroke={color} strokeWidth={2} type="monotone" />
           </LineChart>
         </ResponsiveContainer>

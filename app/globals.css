@@ -29,6 +29,11 @@
   body {
     @apply bg-background text-foreground antialiased;
   }
+
+  .macro-dashboard :where(button, a, summary):focus-visible {
+    outline: 2px solid #0f766e;
+    outline-offset: 3px;
+  }
 }
 
 @layer utilities {
