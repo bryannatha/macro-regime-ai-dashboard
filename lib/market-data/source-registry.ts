@@ -610,7 +610,8 @@ function withCurrentSourceHealth(
   const healthReason = sourceHealth === "AVAILABLE" && unresolved.length
     ? availableCount + " of " + source.identifiers.length + " registered series are available; remaining series: " + unresolved.join(", ") + "."
     : sourceHealth === "AVAILABLE"
-      ? null
+      ? matching.filter(({ eligibilityBlockReason }) => eligibilityBlockReason)
+        .map(({ eligibilityBlockReason, reason }) => [eligibilityBlockReason, reason].filter(Boolean).join(" ")).join(" ") || null
       : matching.find(({ reason }) => reason)?.reason ?? "No eligible current observation is available.";
   const observations = matching.flatMap(({ observations: values }) => values)
     .filter(({ observedAt }) => observedAt <= now.toISOString().slice(0, 10))

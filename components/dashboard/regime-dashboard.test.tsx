@@ -137,6 +137,29 @@ function resolvedInputs(): RegimeInputs {
 }
 
 describe("source-aware regime dashboard", () => {
+  it.each([
+    ["INSUFFICIENT_DATA", null, "insufficient data", "Assessment evidence requirements are not met; no regime is assigned."],
+    ["PROVISIONAL", null, "provisional", "No regime could be established from the admissible evidence."],
+    ["PROVISIONAL", "MIXED", "provisional", "Mixed"],
+    ["NORMAL", "GOLDILOCKS", "normal", "Goldilocks"],
+  ] as const)("uses actual status-dependent copy for %s / %s", (status, regime, statusLabel, explanation) => {
+    const data = payload();
+    data.regime = { ...evaluateRegime(resolvedInputs()), assessmentStatus: status, regime };
+    if (status === "INSUFFICIENT_DATA") data.regime.factorReadiness.labor = { coverage: 0.4, eligibleFamilies: 1, configuredFamilies: 3, classifiable: false, status: "WITHHELD" };
+    const before = JSON.stringify(data);
+    const markup = renderToStaticMarkup(<RegimeDashboard payload={data} />);
+    const hero = markup.match(/<section aria-label="U.S. macro regime"[^>]*>([\s\S]*?)<\/section>/)?.[1];
+    expect(markup).toContain(`Daily context · rules-based · ${statusLabel}`);
+    expect(hero).toContain(explanation);
+    expect(markup).not.toContain("six approved core factors are not source-mapped");
+    if (status === "INSUFFICIENT_DATA") {
+      expect(hero).toContain("3/4 mandatory anchors");
+      expect(hero).toContain("Labor (40% coverage, 1/3 eligible families)");
+      expect(markup).not.toContain("Daily context · rules-based · provisional");
+    }
+    if (status === "PROVISIONAL" && regime === null) expect(hero).not.toContain("factor contract is met");
+    expect(JSON.stringify(data)).toBe(before);
+  });
   it("renders the overview and brief from the same initial cached snapshot without an independent request", () => {
     const data = payload();
     data.regime = { ...evaluateRegime(resolvedInputs()), assessmentStatus: "PROVISIONAL", regime: "MIXED", dataQuality: 60, regimeClarity: 43 };
@@ -178,7 +201,9 @@ describe("source-aware regime dashboard", () => {
     expect(hero).toContain("Core Model Data Quality");
     expect(hero).toContain("Regime Clarity");
     expect(hero).toContain("Sensitivity");
-    expect(hero).toContain("02 Oct 2026");
+    expect(hero).toContain("03 Oct 2026, 19:00 WIB");
+    expect(markup).toContain("Latest source observation:");
+    expect(markup).toContain("02 Oct 2026");
     expect(hero).not.toContain("families eligible");
     expect(implications).toContain("Mixed is the current provisional macro regime.");
     expect(implications).not.toContain("Provider history");

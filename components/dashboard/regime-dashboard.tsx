@@ -47,6 +47,7 @@ import type {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { createDashboardSnapshot, createSnapshotRefresher } from "@/lib/dashboard-snapshot";
+import { withheldRegimeExplanation } from "@/lib/assessment-copy";
 
 interface RegimeDashboardProps {
   payload: DashboardPayload;
@@ -352,7 +353,7 @@ export function RegimeDashboard({ payload: initialPayload }: RegimeDashboardProp
           </div>
           <div className="col-span-2 row-start-2 flex flex-wrap items-center gap-2 sm:gap-4 lg:col-span-1 lg:col-start-2 lg:row-start-1">
             <div className="text-left lg:text-right">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Data checked</div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Assessment as of</div>
               <div className="tabular mt-0.5 text-xs font-medium text-slate-700">{formatDate(payload.generatedAt, true)}</div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -392,7 +393,7 @@ export function RegimeDashboard({ payload: initialPayload }: RegimeDashboardProp
         {reportError && <p role="alert" className="text-xs text-rose-700">{reportError} As of {formatDate(payload.generatedAt, true)}.</p>}
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-teal-700">Daily context · rules-based · provisional</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-teal-700">Daily context · rules-based · {assessmentStatusLabels[payload.regime.assessmentStatus].toLowerCase()}</div>
             <h2 className="mt-1 text-[26px] font-semibold tracking-tight text-slate-950">{title}</h2>
             <p className="mt-1 max-w-3xl text-sm leading-5 text-slate-500">{subtitle}</p>
           </div>
@@ -489,7 +490,7 @@ function RegimeSummary({ payload }: { payload: DashboardPayload }) {
             <p className={cn("mt-3 max-w-2xl text-sm leading-6", resolved ? "text-slate-300" : "text-slate-700")}>
               {resolved
                 ? "A deterministic classification from the approved six-factor U.S. macro framework. It is descriptive research context, not a forecast."
-                : "The six approved core factors are not source-mapped with sufficient coverage yet. The monitoring indicators below are not substitutes, so no regime is assigned."}
+                : `${withheldRegimeExplanation(assessment)} Monitoring indicators are not substitutes for core evidence.`}
             </p>
           </div>
           <div className={cn("grid min-w-0 grid-cols-2 gap-4 rounded-lg border p-4", resolved ? "border-white/10 bg-white/[0.04]" : "border-amber-200 bg-white/70")}>
@@ -507,8 +508,8 @@ function RegimeSummary({ payload }: { payload: DashboardPayload }) {
           </div>
         </div>
         <div className={cn("flex flex-col gap-2 border-t px-5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between sm:px-6", resolved ? "border-white/10 text-slate-300" : "border-amber-200 text-slate-700")}>
-          <span>{resolved ? `Sensitivity: ${assessment.sensitivity?.classification ?? "not available"}. Thresholds are provisional and not backtested.` : "Monitoring scores remain useful independently; the regime stays withheld until its factor contract is met."}</span>
-          <span className="font-mono text-[10px] uppercase tracking-wide opacity-70">As of {formatDate(payload.dataAsOf)}</span>
+          <span>{resolved ? `Sensitivity: ${assessment.sensitivity?.classification ?? "not available"}. Thresholds are provisional and not backtested.` : "Monitoring scores remain useful independently; no economic regime is inferred from missing inputs."}</span>
+          <span className="font-mono text-[10px] uppercase tracking-wide opacity-70">As of {formatDate(payload.generatedAt, true)}</span>
         </div>
       </Card>
 

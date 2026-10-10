@@ -1,4 +1,5 @@
 import { REGIME_LABELS } from "@/lib/regime";
+import { withheldRegimeExplanation } from "@/lib/assessment-copy";
 import type { AIReport, CategoryScore, DashboardPayload, RegimeAssessment, RegimeFactorKey } from "@/lib/types";
 
 const factorLabels: Record<RegimeFactorKey, string> = {
@@ -41,9 +42,9 @@ function summaryFor(
   }
   const unavailable = assessment.reasonCodes.length
     ? assessment.reasonCodes.join(", ")
-    : "required core inputs are unavailable";
+    : "No unique regime was established";
   const signalBrief = signals.map((signal) => `${signal.label} ${signal.score}/100`).join(", ");
-  return `Regime withheld (${assessment.assessmentStatus}) because the six-factor core input contract is not met. ${unavailable}. Core factors: ${coverage}. ${directionSummary} The five dashboard scores are monitoring indicators and are not substitutes for these regime inputs. Missing inputs are not treated as zero. Available monitoring indicators: ${signalBrief || "none"}.`;
+  return `Regime withheld (${assessment.assessmentStatus}). ${withheldRegimeExplanation(assessment)} ${unavailable}. Core factors: ${coverage}. ${directionSummary} The five dashboard scores are monitoring indicators and are not substitutes for these regime inputs. Missing inputs are not treated as zero. Available monitoring indicators: ${signalBrief || "none"}.`;
 }
 
 export function buildRulesReport(payload: DashboardPayload): AIReport {
@@ -70,7 +71,7 @@ export function buildRulesReport(payload: DashboardPayload): AIReport {
     .map((observation) => `${observation.label}: unavailable; check source status and cadence.`);
   const watchlist = [
     ...unavailable.slice(0, 4),
-    ...(regime ? researchImplications?.counterSignals ?? [] : ["Core factor source mapping and release-history coverage are required before a regime can be assigned."]),
+    ...(regime ? researchImplications?.counterSignals ?? [] : [withheldRegimeExplanation(payload.regime)]),
     "The USD/IDR value is an ECB-derived reference cross, not BI JISDOR or tradable spot FX.",
   ];
   const report: AIReport = {

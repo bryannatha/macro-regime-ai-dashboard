@@ -17,7 +17,7 @@ import {
   transformRealM2,
 } from "./core-transformations";
 import { buildCoreFactors } from "./core-factors";
-import { getSourceRegistry } from "./source-registry";
+import { getSourceRegistry, prepareCurrentCoreSources } from "./source-registry";
 import { FEDERAL_RESERVE_SUPPORT_IDENTIFIERS as identifiers } from "./providers/federal-reserve-core";
 
 const retrievedAt = "2026-10-04T12:00:00.000Z";
@@ -290,6 +290,16 @@ describe("approved supporting source parsers", () => {
     const result = parseFederalReserveH8DdpCsv(csv, h8RetrievedAt, "", h8PreservedNotes);
     expect(result.observations).toEqual(parseFederalReserveH8DdpCsv(csv, h8RetrievedAt).observations);
     expect(transformCreditVolume(result).value).toBeNull();
+  });
+
+  it("exposes verified H.8 eligibility limitations without calling valid CSV retrieval a source failure", () => {
+    const data = parseFederalReserveH8DdpCsv(h8DdpCsv(dates("2026-06-10", 17, 7)), h8RetrievedAt, "", h8PreservedNotes);
+    const prepared = prepareCurrentCoreSources(getSourceRegistry(), [data], new Date(h8RetrievedAt));
+    const source = prepared.sourceRegistry.find(({ id }) => id === h8Source);
+    expect(source?.sourceHealth).toBe("AVAILABLE");
+    expect(source?.healthReason).toContain("reclassification break");
+    expect(source?.healthReason).toContain(h8NotesEndpoint);
+    expect(transformCreditVolume(prepared.series[0]).value).toBeNull();
   });
 
   it("allows a comparison window wholly after the verified break", () => {
