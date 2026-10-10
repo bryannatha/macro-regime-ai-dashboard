@@ -309,6 +309,17 @@ describe("approved supporting source parsers", () => {
     expect(transformCreditVolume(result).value).not.toBeNull();
   });
 
+  it.each([
+    h8PreservedNotes.replace('<h3><a name="notes_20260701">July 1, 2026</a></h3>', '<div><h3><a name="notes_20260701">July 1, 2026</a></h3></div>'),
+    h8PreservedNotes.replace("<p>As of the week ending July 1", "<div></div><p>As of the week ending July 1"),
+  ])("fails closed when nested archive markup can truncate a dated break section (%#)", (notes) => {
+    const csv = h8DdpCsv(dates("2026-06-10", 17, 7));
+    const result = parseFederalReserveH8DdpCsv(csv, h8RetrievedAt, "", notes);
+    expect(result.observations).toEqual(parseFederalReserveH8DdpCsv(csv, h8RetrievedAt).observations);
+    expect(result.eligibilityBlockReason).toContain("break metadata");
+    expect(transformCreditVolume(result).value).toBeNull();
+  });
+
   it.each(["", "<html>Access denied</html>", h8PreservedNotes.replace('name="notes_20260701"', 'name="notes_20260702"'), h8PreservedNotes.replace("October 9, 2026", "May 1, 2026")])(
     "fails closed for missing, invalid, truncated, or out-of-date preserved H.8 metadata (%#)", (notes) => {
       const result = parseFederalReserveH8DdpCsv(h8DdpCsv(dates("2026-06-10", 17, 7)), h8RetrievedAt, "", notes);

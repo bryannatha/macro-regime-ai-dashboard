@@ -417,6 +417,8 @@ function preservedH8Breaks(html: string, firstDate: string, lastDate: string, re
       !updatedAt || updatedAt < lastDate || updatedAt > retrievedAt.slice(0, 10)) return null;
   const indexed = Array.from(html.matchAll(/href=["']#notes_(\d{8})["']/gi), (match) => match[1]);
   const sections = Array.from(html.matchAll(/<div\b[^>]*class=["']datanote["'][^>]*>([\s\S]*?)<\/div>/gi), (match) => match[1]);
+  // This verified flat layout cannot safely establish completeness after a nested div truncates extraction.
+  if (sections.some((section) => /<div\b/i.test(section))) return null;
   const notes = sections.map((section) => {
     const heading = /<h3\b[^>]*>\s*<a\b[^>]*(?:name|id)=["']notes_(\d{8})["'][^>]*>([^<]+)<\/a>\s*<\/h3>/i.exec(section);
     if (!heading) return null;
