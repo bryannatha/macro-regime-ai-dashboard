@@ -48,6 +48,7 @@ import type {
 import { cn } from "@/lib/utils";
 import { createDashboardSnapshot, createSnapshotRefresher } from "@/lib/dashboard-snapshot";
 import { withheldRegimeExplanation } from "@/lib/assessment-copy";
+import { AssessmentExplanation } from "./assessment-explanation";
 
 interface RegimeDashboardProps {
   payload: DashboardPayload;
@@ -514,6 +515,7 @@ function RegimeSummary({ payload }: { payload: DashboardPayload }) {
       </Card>
 
     </section>
+      <AssessmentExplanation payload={payload} factorLabels={regimeFactorLabels} />
       <section aria-labelledby="core-data-coverage-title" className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="max-w-4xl">
