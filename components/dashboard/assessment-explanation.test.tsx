@@ -1,6 +1,7 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { XMLParser } from "fast-xml-parser";
 import { evaluateRegime } from "@/lib/regime";
 import { buildRulesReport } from "@/lib/rules-report";
 import { createDashboardSnapshot, createSnapshotRefresher } from "@/lib/dashboard-snapshot";
@@ -84,6 +85,19 @@ describe("snapshot-backed assessment explanations", () => {
     expect(panel).toContain("Individual predicate attribution is unavailable");
     expect(panel).not.toContain("Labor is the cause");
     expect(panel).not.toContain("Confirmed NORMAL-quality blockers");
+  });
+
+  it("groups each regime term and its verdict/diagnostic directly for accessible description-list semantics", () => {
+    const panel = explanation(payload());
+    const list = panel.match(/<dl[^>]*>[\s\S]*?<\/dl>/)?.[0];
+    expect(list).toBeDefined();
+    const groups = new XMLParser().parse(list!).dl.div;
+    expect(groups).toHaveLength(5);
+    for (const group of groups) {
+      expect(group).toHaveProperty("dt");
+      expect(group).toHaveProperty("dd");
+      expect(group).not.toHaveProperty("div");
+    }
   });
 
   it("explains PROVISIONAL / MIXED as resolved outside positive envelopes, not a missing-data fallback", () => {
@@ -225,9 +239,24 @@ describe("snapshot-backed assessment explanations", () => {
     data.regime.sensitivity = { ...fragile, nativeGuardChanged: changed };
     const panel = explanation(data);
     expect(panel).toContain(`Native guard changed the result: ${changed ? "Yes" : "No"}`);
-    expect(panel).toContain("Another resolved regime appeared: No");
-    expect(panel).toContain("Another named regime appeared: No");
+    expect(panel).toContain("Another resolved regime appeared in score-cutoff checks: No");
+    expect(panel).toContain("Another named regime appeared in score-cutoff checks: No");
     expect(panel).not.toContain("changed to Goldilocks");
+  });
+
+  it("does not imply native-only fragility retained the label in every sensitivity check", () => {
+    const source = inputs();
+    source.native.realPolicyRate = 1.6;
+    const data = payload(source);
+    expect(data.regime).toMatchObject({
+      assessmentStatus: "NORMAL", regime: "MIXED",
+      sensitivity: { classification: "FRAGILE", same: 34, total: 34, nativeGuardChanged: true, differentResolvedRegime: false, differentNamedRegime: false },
+    });
+    const panel = explanation(data);
+    expect(panel).toContain("34/34 score-cutoff checks");
+    expect(panel).toContain("Native guard changed the result: Yes");
+    expect(panel).toContain("Another resolved regime appeared in score-cutoff checks: No");
+    expect(panel).toContain("Another named regime appeared in score-cutoff checks: No");
   });
 
   it("does not reconstruct sensitivity attribution or history failures from missing evidence", () => {

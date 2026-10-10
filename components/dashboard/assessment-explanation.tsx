@@ -87,12 +87,10 @@ function RegimeExplanation({ assessment }: { assessment: RegimeAssessment }) {
           {namedRegimes.map((key) => {
             const rule = assessment.ruleDiagnostics[key];
             return (
-              <div data-rule={key} key={key}>
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <dt className="max-w-[75%] font-medium text-slate-700">{REGIME_LABELS[key]}</dt>
-                  <dd><Badge variant={rule?.result === "TRUE" ? "positive" : rule?.result === "FALSE" ? "outline" : "caution"} className="text-[10px]">{rule?.result ?? "Unavailable"}</Badge></dd>
-                </div>
-                {rule && <dd className="mt-1 break-words text-[11px]">Diagnostic support: {new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(rule.support)}/100{rule.failedOrUnknownGates.length ? `; ${rule.failedOrUnknownGates.join(", ")}` : ""}.</dd>}
+              <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-1" data-rule={key} key={key}>
+                <dt className="font-medium text-slate-700">{REGIME_LABELS[key]}</dt>
+                <dd><Badge variant={rule?.result === "TRUE" ? "positive" : rule?.result === "FALSE" ? "outline" : "caution"} className="text-[10px]">{rule?.result ?? "Unavailable"}</Badge></dd>
+                {rule && <dd className="col-span-2 break-words text-[11px]">Diagnostic support: {new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(rule.support)}/100{rule.failedOrUnknownGates.length ? `; ${rule.failedOrUnknownGates.join(", ")}` : ""}.</dd>}
               </div>
             );
           })}
@@ -158,8 +156,8 @@ function SensitivityExplanation({ assessment }: { assessment: RegimeAssessment }
         <p className="mt-3">The frozen checks vary 16 score cutoffs individually by +/-5 (32 checks), then shift all cutoffs together by +/-5 (2 checks). Separate native-guard variants are tested. An unresolved result counts as disagreement, not a different resolved regime.</p>
         {sensitivity && <ul className="mt-3 space-y-1">
           <li>Native guard changed the result: {sensitivity.nativeGuardChanged ? "Yes" : "No"}</li>
-          <li>Another resolved regime appeared: {sensitivity.differentResolvedRegime ? "Yes" : "No"}</li>
-          <li>Another named regime appeared: {sensitivity.differentNamedRegime ? "Yes" : "No"}</li>
+          <li>Another resolved regime appeared in score-cutoff checks: {sensitivity.differentResolvedRegime ? "Yes" : "No"}</li>
+          <li>Another named regime appeared in score-cutoff checks: {sensitivity.differentNamedRegime ? "Yes" : "No"}</li>
           <li>Conservative agreement (smaller of the two score-cutoff summaries): {percent(sensitivity.agreement / 100)}</li>
         </ul>}
         <p className="mt-3">FRAGILE indicates a native-guard change, score-cutoff agreement below 80%, or a switch from one named regime to another. ROBUST retains the label across all score-cutoff checks without those fragility triggers; other results are MODERATELY SENSITIVE.</p>
