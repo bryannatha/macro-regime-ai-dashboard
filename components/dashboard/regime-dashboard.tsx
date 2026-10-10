@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   Activity,
   Banknote,
@@ -46,6 +46,8 @@ import type {
   SourceRegistryEntry,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { createDashboardSnapshot, createSnapshotRefresher } from "@/lib/dashboard-snapshot";
+import { withheldRegimeExplanation } from "@/lib/assessment-copy";
 
 interface RegimeDashboardProps {
   payload: DashboardPayload;
@@ -298,11 +300,20 @@ function sourceStateVariant(state: SourceRegistryEntry["sourceHealth"]): "positi
     : state === "MISSING" ? "outline" : "caution";
 }
 
-export function RegimeDashboard({ payload }: RegimeDashboardProps) {
+export function RegimeDashboard({ payload: initialPayload }: RegimeDashboardProps) {
   const [view, setView] = useState<DashboardView>("overview");
-  const [report, setReport] = useState<AIReport | null>(null);
+  const [snapshot, setSnapshot] = useState(() => createDashboardSnapshot(initialPayload));
+  const { payload, report } = snapshot;
   const [reportError, setReportError] = useState<string | null>(null);
-  const [loadingReport, setLoadingReport] = useState(true);
+  const [loadingReport, setLoadingReport] = useState(false);
+  const refresh = useRef<ReturnType<typeof createSnapshotRefresher> | null>(null);
+  if (!refresh.current) {
+    refresh.current = createSnapshotRefresher(snapshot, async () => {
+      const response = await fetch("/api/market-data", { cache: "no-store" });
+      if (!response.ok) throw new Error("Snapshot request failed");
+      return await response.json() as DashboardPayload;
+    }, setSnapshot);
+  }
   const counts = sourceCount(payload);
   const coreFactors = coreFactorCount(payload);
 
@@ -310,19 +321,13 @@ export function RegimeDashboard({ payload }: RegimeDashboardProps) {
     setLoadingReport(true);
     setReportError(null);
     try {
-      const response = await fetch("/api/ai-report", { cache: "no-store" });
-      if (!response.ok) throw new Error("Report request failed");
-      setReport((await response.json()) as AIReport);
+      await refresh.current!();
     } catch {
-      setReportError("The rules brief could not be loaded. The dashboard data is still available.");
+      setReportError("Refresh failed. The overview and brief still show the previous assessment snapshot; current source health has not been rechecked.");
     } finally {
       setLoadingReport(false);
     }
   }, []);
-
-  useEffect(() => {
-    void requestReport();
-  }, [requestReport]);
 
   const title = view === "overview"
     ? "Macro regime overview"
@@ -336,7 +341,7 @@ export function RegimeDashboard({ payload }: RegimeDashboardProps) {
       : "Transparent, provisional rules; missing inputs are never scored as zero.";
 
   return (
-    <div className="macro-dashboard min-h-screen bg-[#f4f7f8] text-slate-900">
+    <div className="macro-dashboard min-h-screen bg-[#f4f7f8] text-slate-900" data-snapshot-id={snapshot.id}>
       <header className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
         <div className="mx-auto grid max-w-[1440px] grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 px-4 py-3 sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto_auto] xl:px-8">
           <div className="flex min-w-0 items-center gap-3">
@@ -348,7 +353,7 @@ export function RegimeDashboard({ payload }: RegimeDashboardProps) {
           </div>
           <div className="col-span-2 row-start-2 flex flex-wrap items-center gap-2 sm:gap-4 lg:col-span-1 lg:col-start-2 lg:row-start-1">
             <div className="text-left lg:text-right">
-              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Data checked</div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-400">Assessment as of</div>
               <div className="tabular mt-0.5 text-xs font-medium text-slate-700">{formatDate(payload.generatedAt, true)}</div>
             </div>
             <div className="flex flex-wrap items-center gap-1.5">
@@ -360,7 +365,7 @@ export function RegimeDashboard({ payload }: RegimeDashboardProps) {
               </Badge>
             </div>
           </div>
-          <Button aria-label="Refresh dashboard data" className="col-start-2 row-start-1 lg:col-start-3" onClick={() => window.location.reload()} size="sm" variant="outline">
+          <Button aria-label="Refresh dashboard data" title="Refresh the shared overview and brief snapshot" disabled={loadingReport} className="col-start-2 row-start-1 lg:col-start-3" onClick={() => void requestReport()} size="sm" variant="outline">
             <RefreshCw className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Refresh</span>
           </Button>
@@ -384,9 +389,11 @@ export function RegimeDashboard({ payload }: RegimeDashboardProps) {
       </header>
 
       <main className="mx-auto flex max-w-[1440px] flex-col gap-5 px-4 py-6 sm:px-6 xl:px-8">
+        {loadingReport && <p role="status" className="text-xs text-slate-600">Refreshing the overview and brief together. Showing the previous assessment as of {formatDate(payload.generatedAt, true)}.</p>}
+        {reportError && <p role="alert" className="text-xs text-rose-700">{reportError} As of {formatDate(payload.generatedAt, true)}.</p>}
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div>
-            <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-teal-700">Daily context · rules-based · provisional</div>
+            <div className="text-[10px] font-semibold uppercase tracking-[0.2em] text-teal-700">Daily context · rules-based · {assessmentStatusLabels[payload.regime.assessmentStatus].toLowerCase()}</div>
             <h2 className="mt-1 text-[26px] font-semibold tracking-tight text-slate-950">{title}</h2>
             <p className="mt-1 max-w-3xl text-sm leading-5 text-slate-500">{subtitle}</p>
           </div>
@@ -483,7 +490,7 @@ function RegimeSummary({ payload }: { payload: DashboardPayload }) {
             <p className={cn("mt-3 max-w-2xl text-sm leading-6", resolved ? "text-slate-300" : "text-slate-700")}>
               {resolved
                 ? "A deterministic classification from the approved six-factor U.S. macro framework. It is descriptive research context, not a forecast."
-                : "The six approved core factors are not source-mapped with sufficient coverage yet. The monitoring indicators below are not substitutes, so no regime is assigned."}
+                : `${withheldRegimeExplanation(assessment)} Monitoring indicators are not substitutes for core evidence.`}
             </p>
           </div>
           <div className={cn("grid min-w-0 grid-cols-2 gap-4 rounded-lg border p-4", resolved ? "border-white/10 bg-white/[0.04]" : "border-amber-200 bg-white/70")}>
@@ -501,8 +508,8 @@ function RegimeSummary({ payload }: { payload: DashboardPayload }) {
           </div>
         </div>
         <div className={cn("flex flex-col gap-2 border-t px-5 py-3 text-xs sm:flex-row sm:items-center sm:justify-between sm:px-6", resolved ? "border-white/10 text-slate-300" : "border-amber-200 text-slate-700")}>
-          <span>{resolved ? `Sensitivity: ${assessment.sensitivity?.classification ?? "not available"}. Thresholds are provisional and not backtested.` : "Monitoring scores remain useful independently; the regime stays withheld until its factor contract is met."}</span>
-          <span className="font-mono text-[10px] uppercase tracking-wide opacity-70">As of {formatDate(payload.dataAsOf)}</span>
+          <span>{resolved ? `Sensitivity: ${assessment.sensitivity?.classification ?? "not available"}. Thresholds are provisional and not backtested.` : "Monitoring scores remain useful independently; no economic regime is inferred from missing inputs."}</span>
+          <span className="font-mono text-[10px] uppercase tracking-wide opacity-70">As of {formatDate(payload.generatedAt, true)}</span>
         </div>
       </Card>
 
@@ -648,16 +655,18 @@ export function ReportCard({
           <div className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-teal-700" /><CardTitle className="text-sm">Daily rules brief</CardTitle></div>
           <CardDescription className="mt-1 text-xs">Deterministic rules output; not AI-generated.</CardDescription>
         </div>
-        <Button disabled={loading} onClick={onRefresh} size="sm" variant="outline">
+        <Button disabled={loading} title="Refresh the shared overview and brief snapshot" onClick={onRefresh} size="sm" variant="outline">
           <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} /> Refresh brief
         </Button>
       </CardHeader>
       <CardContent className="px-5 pb-5">
-        {loading ? (
+        {loading && !report ? (
           <p className="rounded-md bg-slate-50 p-4 text-xs text-slate-500">Loading the current coverage-aware brief…</p>
-        ) : error ? (
+        ) : null}
+        {error && (
           <p className="rounded-md border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">{error}</p>
-        ) : report ? (
+        )}
+        {report ? (
           <div className="space-y-4">
             <div className="rounded-lg border border-slate-100 bg-slate-50 p-4">
               <div className="flex flex-wrap items-center gap-2">

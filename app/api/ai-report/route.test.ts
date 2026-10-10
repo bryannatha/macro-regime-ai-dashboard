@@ -98,6 +98,16 @@ describe("GET /api/ai-report", () => {
     expect(report.researchImplications).toBeNull();
   });
 
+  it("describes a provisional unlabeled assessment without falsely claiming source mapping is absent", async () => {
+    const provisional = { ...normalRegime, assessmentStatus: "PROVISIONAL" as const, regime: null };
+    vi.mocked(getDashboardPayload).mockResolvedValue(dashboard(provisional));
+    const report = await (await GET()).json();
+    expect(report.executiveSummary).toContain("No regime could be established from the admissible evidence.");
+    expect(report.executiveSummary).not.toContain("core input contract is not met");
+    expect(report.watchlist.join(" ")).not.toContain("Core factor source mapping");
+    expect(report).toMatchObject({ assessmentStatus: "PROVISIONAL", regime: null, dataQuality: 91, regimeClarity: 88 });
+  });
+
   it("returns descriptive regime implications without causal demand language", async () => {
     vi.mocked(getDashboardPayload).mockResolvedValue(dashboard(normalRegime));
     const response = await GET();

@@ -17,7 +17,7 @@ import {
   transformRealM2,
 } from "./core-transformations";
 import { buildCoreFactors } from "./core-factors";
-import { getSourceRegistry } from "./source-registry";
+import { getSourceRegistry, prepareCurrentCoreSources } from "./source-registry";
 import { FEDERAL_RESERVE_SUPPORT_IDENTIFIERS as identifiers } from "./providers/federal-reserve-core";
 
 const retrievedAt = "2026-10-04T12:00:00.000Z";
@@ -107,6 +107,14 @@ function h8DdpCsv(periods = dates("2026-01-07", 17, 7)): string {
 
 const h8DdpChooser = `<select><option value="rel=H8&amp;series=17951c643555bee48d63bb6957a4a92e&amp;lastobs=&amp;from=&amp;to=&amp;filetype=csv&amp;label=include&amp;layout=seriescolumn&amp;type=package">All Commercial Banks, SA (Weekly) [csv, All Observations, 757.0 KB]</option></select>`;
 const h8ReleaseWithBreak = `<h2>Release Date: October 2, 2026</h2><p>As of the week ending July 1, 2026, foreign-related institutions reclassified $6.1 billion.</p>`;
+const h8NotesEndpoint = "https://www.federalreserve.gov/releases/h8/h8notes.htm";
+const h8RetrievedAt = "2026-10-10T12:00:00Z";
+const h8PreservedNotes = `<title>Assets and Liabilities of Commercial Banks in the United States - H.8</title>
+  <a href="#notes_20260701">July 1, 2026</a><a href="#notes_20260107">January 7, 2026</a>
+  <div class="datanote"><h3><a name="notes_20260701">July 1, 2026</a></h3>
+  <p>As of the week ending July 1, 2026, foreign-related institutions reclassified $6.1 billion.</p></div>
+  <div class="datanote"><h3><a name="notes_20260107">January 7, 2026</a></h3><p>A thrift converted to a commercial bank.</p></div>
+  <div id="lastUpdate">Last Update: October 9, 2026</div>`;
 
 const sloosHtml = `<h3>Figure 1: Measures of Supply and Demand for C&amp;I Loans by Size of Firm Seeking Loans</h3>
 <table><thead>
@@ -242,17 +250,98 @@ describe("approved supporting source parsers", () => {
         const url = String(input);
         requests.push(url);
         if (url.includes("/releases/h8/current/default.htm")) return new Response(h8ReleaseWithBreak, { status: 200 });
+        if (url === h8NotesEndpoint) return new Response(h8PreservedNotes);
         if (url.includes("/datadownload/choose.aspx?rel=H8")) return new Response(h8DdpChooser, { status: 200 });
         return new Response(h8DdpCsv(dates("2026-06-03", 17, 7)), { status: 200 });
       },
     });
 
-    expect(requests).toHaveLength(3);
-    expect(requests[2]).toContain("Output.aspx?rel=H8&series=17951c643555bee48d63bb6957a4a92e");
+    expect(requests).toHaveLength(4);
+    expect(requests[3]).toContain("Output.aspx?rel=H8&series=17951c643555bee48d63bb6957a4a92e");
     expect(result).toMatchObject({ identifier: "H8/H8/B1020NCBA", state: "AVAILABLE", observations: expect.any(Array) });
     expect(result.observations).toHaveLength(17);
     expect(result.eligibilityBlockReason).toContain("reclassification break");
     expect(transformCreditVolume(result)).toMatchObject({ value: null, reason: expect.stringContaining("reclassification break") });
+  });
+
+  it("retains the official H.8 break after it disappears from current-release notes", async () => {
+    const csv = h8DdpCsv(dates("2026-06-10", 17, 7));
+    const requests: string[] = [];
+    const result = await fetchFederalReserveH8Loans({
+      now: new Date(h8RetrievedAt),
+      fetchImpl: async (input) => {
+        const url = String(input);
+        requests.push(url);
+        if (url === h8NotesEndpoint) return new Response(h8PreservedNotes);
+        if (url.includes("/current/")) return new Response("<h2>Release Date: October 2, 2026</h2><p>No current reclassification notice.</p>");
+        if (url.includes("choose.aspx")) return new Response(h8DdpChooser);
+        return new Response(csv);
+      },
+    });
+    expect(requests).toContain(h8NotesEndpoint);
+    expect(result).toMatchObject({ state: "AVAILABLE", parserStatus: "VERIFIED", historyStatus: "VERIFIED" });
+    expect(result.observations).toEqual(parseFederalReserveH8DdpCsv(csv, new Date(h8RetrievedAt).toISOString()).observations);
+    expect(transformCreditVolume(result)).toMatchObject({ value: null, reason: expect.stringContaining("reclassification break") });
+    expect(result.reason).toContain(h8NotesEndpoint);
+  });
+
+  it("withholds the same CSV with preserved break metadata without changing observations", () => {
+    const csv = h8DdpCsv(dates("2026-06-10", 17, 7));
+    const result = parseFederalReserveH8DdpCsv(csv, h8RetrievedAt, "", h8PreservedNotes);
+    expect(result.observations).toEqual(parseFederalReserveH8DdpCsv(csv, h8RetrievedAt).observations);
+    expect(transformCreditVolume(result).value).toBeNull();
+  });
+
+  it("exposes verified H.8 eligibility limitations without calling valid CSV retrieval a source failure", () => {
+    const data = parseFederalReserveH8DdpCsv(h8DdpCsv(dates("2026-06-10", 17, 7)), h8RetrievedAt, "", h8PreservedNotes);
+    const prepared = prepareCurrentCoreSources(getSourceRegistry(), [data], new Date(h8RetrievedAt));
+    const source = prepared.sourceRegistry.find(({ id }) => id === h8Source);
+    expect(source?.sourceHealth).toBe("AVAILABLE");
+    expect(source?.healthReason).toContain("reclassification break");
+    expect(source?.healthReason).toContain(h8NotesEndpoint);
+    expect(transformCreditVolume(prepared.series[0]).value).toBeNull();
+  });
+
+  it("allows a comparison window wholly after the verified break", () => {
+    const csv = h8DdpCsv(dates("2026-07-08", 17, 7));
+    const result = parseFederalReserveH8DdpCsv(csv, "2026-11-07T12:00:00Z", "", h8PreservedNotes.replace("October 9, 2026", "November 6, 2026"));
+    expect(result.eligibilityBlockReason).toBeNull();
+    expect(transformCreditVolume(result).value).not.toBeNull();
+  });
+
+  it.each([
+    h8PreservedNotes.replace('<h3><a name="notes_20260701">July 1, 2026</a></h3>', '<div><h3><a name="notes_20260701">July 1, 2026</a></h3></div>'),
+    h8PreservedNotes.replace("<p>As of the week ending July 1", "<div></div><p>As of the week ending July 1"),
+  ])("fails closed when nested archive markup can truncate a dated break section (%#)", (notes) => {
+    const csv = h8DdpCsv(dates("2026-06-10", 17, 7));
+    const result = parseFederalReserveH8DdpCsv(csv, h8RetrievedAt, "", notes);
+    expect(result.observations).toEqual(parseFederalReserveH8DdpCsv(csv, h8RetrievedAt).observations);
+    expect(result.eligibilityBlockReason).toContain("break metadata");
+    expect(transformCreditVolume(result).value).toBeNull();
+  });
+
+  it.each(["", "<html>Access denied</html>", h8PreservedNotes.replace('name="notes_20260701"', 'name="notes_20260702"'), h8PreservedNotes.replace("October 9, 2026", "May 1, 2026")])(
+    "fails closed for missing, invalid, truncated, or out-of-date preserved H.8 metadata (%#)", (notes) => {
+      const result = parseFederalReserveH8DdpCsv(h8DdpCsv(dates("2026-06-10", 17, 7)), h8RetrievedAt, "", notes);
+      expect(result.observations).toHaveLength(17);
+      expect(transformCreditVolume(result)).toMatchObject({ value: null, reason: expect.stringContaining("break metadata") });
+    },
+  );
+
+  it("preserves H.8 observations but blocks eligibility when the official notes request fails", async () => {
+    const result = await fetchFederalReserveH8Loans({
+      now: new Date(retrievedAt),
+      fetchImpl: async (input) => {
+        const url = String(input);
+        if (url === h8NotesEndpoint) return new Response("unavailable", { status: 503 });
+        if (url.includes("/current/")) return new Response("<h2>Release Date: October 2, 2026</h2>");
+        if (url.includes("choose.aspx")) return new Response(h8DdpChooser);
+        return new Response(h8DdpCsv(dates("2026-06-10", 17, 7)));
+      },
+    });
+    expect(result.state).toBe("AVAILABLE");
+    expect(result.observations).toHaveLength(17);
+    expect(transformCreditVolume(result).value).toBeNull();
   });
 
   it("rejects missing or ambiguous credit-performance series instead of guessing the rate", () => {
@@ -377,6 +466,16 @@ describe("supporting factor assembly", () => {
     expect(result.families.map(({ key, weight }) => [key, weight])).toEqual([
       ["standards", 0.4], ["bankVolume", 0.3], ["performance", 0.3],
     ]);
+  });
+
+  it("changes only the bank-volume family when preserved H.8 evidence blocks its window", () => {
+    const sources = supportingSources(false);
+    const csv = h8DdpCsv(dates("2026-06-10", 17, 7));
+    const before = buildCoreFactors([...sources, series(h8Source, identifiers.h8Loans, Array(17).fill(100), dates("2026-06-10", 17, 7), "billions USD", "SA")], h8RetrievedAt).factors;
+    const after = buildCoreFactors([...sources, parseFederalReserveH8DdpCsv(csv, h8RetrievedAt, "", h8PreservedNotes)], h8RetrievedAt).factors;
+    expect(after.creditConditions).toMatchObject({ coverage: 0.7, eligibleFamilies: 2, status: "LIMITED" });
+    expect(after.creditConditions.families.filter(({ key }) => key !== "bankVolume")).toEqual(before.creditConditions.families.filter(({ key }) => key !== "bankVolume"));
+    for (const key of ["inflation", "growth", "labor", "policyRates", "liquidityProxy"] as const) expect(after[key]).toEqual(before[key]);
   });
 
   it("registers the five approved Federal Reserve supporting feeds with fixed family allocations", () => {

@@ -13,6 +13,7 @@ const h41Endpoint = "https://www.federalreserve.gov/releases/h41/current/";
 const h6ArchiveEndpoint = "https://www.federalreserve.gov/releases/h6/data/FRB_h6_xml.zip";
 const sloosIndexEndpoint = "https://www.federalreserve.gov/data/sloos.htm";
 const h8Endpoint = "https://www.federalreserve.gov/releases/h8/current/default.htm";
+const h8NotesEndpoint = "https://www.federalreserve.gov/releases/h8/h8notes.htm";
 const h8DdpChooseEndpoint = "https://www.federalreserve.gov/datadownload/choose.aspx?rel=H8";
 const creditPerformanceArchiveEndpoint = "https://www.federalreserve.gov/releases/chargeoff/data/FRB_CHGDEL_xml.zip";
 
@@ -408,6 +409,30 @@ function recentReclassificationBreak(html: string, firstDate: string, lastDate: 
   });
 }
 
+function preservedH8Breaks(html: string, firstDate: string, lastDate: string, retrievedAt: string): string[] | null {
+  const text = htmlText(html);
+  const updated = /Last Update:\s*([A-Za-z]+\s+\d{1,2},?\s+\d{4})/i.exec(text);
+  const updatedAt = updated ? longDate(updated[1]) : null;
+  if (!/Assets and Liabilities of Commercial Banks in the United States\s*-\s*H\.8/i.test(text) ||
+      !updatedAt || updatedAt < lastDate || updatedAt > retrievedAt.slice(0, 10)) return null;
+  const indexed = Array.from(html.matchAll(/href=["']#notes_(\d{8})["']/gi), (match) => match[1]);
+  const sections = Array.from(html.matchAll(/<div\b[^>]*class=["']datanote["'][^>]*>([\s\S]*?)<\/div>/gi), (match) => match[1]);
+  // This verified flat layout cannot safely establish completeness after a nested div truncates extraction.
+  if (sections.some((section) => /<div\b/i.test(section))) return null;
+  const notes = sections.map((section) => {
+    const heading = /<h3\b[^>]*>\s*<a\b[^>]*(?:name|id)=["']notes_(\d{8})["'][^>]*>([^<]+)<\/a>\s*<\/h3>/i.exec(section);
+    if (!heading) return null;
+    const date = longDate(htmlText(heading[2]));
+    if (!date || date.replaceAll("-", "") !== heading[1] || date > updatedAt) return null;
+    return { key: heading[1], date, text: htmlText(section) };
+  });
+  // Verify the archive index and dated sections together: a truncated page is not evidence of no break.
+  if (!indexed.length || notes.some((note) => note === null) || indexed.length !== notes.length ||
+      new Set(indexed).size !== indexed.length || new Set(notes.map((note) => note!.key)).size !== notes.length ||
+      notes.some((note) => !indexed.includes(note!.key)) || notes.every((note) => note!.date > firstDate)) return null;
+  return notes.filter((note) => /reclassif|definitional clarification/i.test(note!.text)).map((note) => note!.date);
+}
+
 export function parseFederalReserveH8Loans(html: string, retrievedAt: string): CoreObservationSeriesResult {
   const spec = { sourceId: sourceIds.h8, identifier: FEDERAL_RESERVE_SUPPORT_IDENTIFIERS.h8Loans };
   if (typeof html !== "string" || !validRetrievedAt(retrievedAt) || /<\s*html\b/i.test(html) && !/<table\b/i.test(html)) {
@@ -446,6 +471,7 @@ export function parseFederalReserveH8DdpCsv(
   csv: string,
   retrievedAt: string,
   releaseHtml = "",
+  preservedNotesHtml = "",
 ): CoreObservationSeriesResult {
   const spec = { sourceId: sourceIds.h8, identifier: FEDERAL_RESERVE_SUPPORT_IDENTIFIERS.h8Loans };
   if (typeof csv !== "string" || !validRetrievedAt(retrievedAt)) {
@@ -487,13 +513,20 @@ export function parseFederalReserveH8DdpCsv(
 
     const firstRecentDate = sorted.at(-17)!.date;
     const lastRecentDate = sorted.at(-1)!.date;
-    const eligibilityBlockReason = recentReclassificationBreak(releaseHtml, firstRecentDate, lastRecentDate)
+    const breaks = preservedH8Breaks(preservedNotesHtml, firstRecentDate, lastRecentDate, retrievedAt);
+    const eligibilityBlockReason = recentReclassificationBreak(releaseHtml, firstRecentDate, lastRecentDate) ||
+      breaks?.some((date) => date >= firstRecentDate && date <= lastRecentDate)
       ? "The H.8 credit-volume comparison window crosses a disclosed reclassification break."
-      : null;
+      : breaks === null
+        ? "The H.8 preserved official break metadata could not be verified for this comparison window."
+        : null;
     const observations = sorted.map(({ date, value }) => observation(
       spec.sourceId, spec.identifier, value, "billions USD", "SA", date, retrievedAt,
     ));
-    return { ...available(spec, observations, retrievedAt), eligibilityBlockReason };
+    return {
+      ...available(spec, observations, retrievedAt, `Break metadata: ${h8NotesEndpoint}; ${breaks === null ? "unverified" : "verified dated archive"}.`),
+      eligibilityBlockReason,
+    };
   } catch {
     return unavailable(spec, retrievedAt, "FAILED", "The official H.8 DDP CSV could not be parsed.");
   }
@@ -631,14 +664,15 @@ export async function fetchFederalReserveH8Loans(options: AdapterOptions = {}): 
   const spec = { sourceId: sourceIds.h8, identifier: FEDERAL_RESERVE_SUPPORT_IDENTIFIERS.h8Loans };
   const retrievedAt = fetchedAtFrom(options.now ?? new Date());
   try {
-    const [releaseHtml, chooserHtml] = await Promise.all([
+    const [releaseHtml, chooserHtml, notesHtml] = await Promise.all([
       responseText(h8Endpoint, options, 21_600),
       responseText(h8DdpChooseEndpoint, options, 21_600),
+      responseText(h8NotesEndpoint, options, 21_600).catch(() => ""),
     ]);
     const csvUrl = latestH8DdpCsvUrl(chooserHtml);
     if (!csvUrl) return unavailable(spec, retrievedAt, "FAILED", "The official H.8 DDP page did not identify its all-bank SA weekly package.");
     const csv = await responseText(csvUrl, options, 21_600);
-    return parseFederalReserveH8DdpCsv(csv, retrievedAt, releaseHtml);
+    return parseFederalReserveH8DdpCsv(csv, retrievedAt, releaseHtml, notesHtml);
   } catch {
     return unavailable(spec, null, "FAILED", "The official H.8 release was unavailable.");
   }
