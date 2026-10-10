@@ -137,6 +137,34 @@ function resolvedInputs(): RegimeInputs {
 }
 
 describe("source-aware regime dashboard", () => {
+  it("renders the overview and brief from the same initial cached snapshot without an independent request", () => {
+    const data = payload();
+    data.regime = { ...evaluateRegime(resolvedInputs()), assessmentStatus: "PROVISIONAL", regime: "MIXED", dataQuality: 60, regimeClarity: 43 };
+    const markup = renderToStaticMarkup(<RegimeDashboard payload={data} />);
+    expect(markup).toContain("U.S. Macro Regime Brief: Mixed");
+    expect(markup).toContain(`data-snapshot-id="${data.generatedAt}"`);
+    expect(markup).not.toContain("Loading the current coverage-aware brief");
+    expect(markup).toContain("Core Model Data Quality 60/100");
+    expect(markup).toContain("Regime Clarity 43/100");
+  });
+
+  it("keeps the prior coherent brief visible during refresh and transport failure", () => {
+    const data = payload();
+    const assessment = data.regime;
+    const report: AIReport = {
+      generatedAt: data.generatedAt, dataAsOf: data.dataAsOf, title: "Previous coherent coverage brief", regime: assessment.regime,
+      assessmentStatus: assessment.assessmentStatus, dataQuality: assessment.dataQuality, regimeClarity: assessment.regimeClarity,
+      leadingDirection: assessment.leadingDirection, inflationDirection: assessment.inflationDirection, transitionRisk: assessment.transitionRisk,
+      executiveSummary: "Previous complete narrative", signals: ["Previous reading"], watchlist: ["Previous watchlist"],
+      researchImplications: null, riskNote: "Previous limitations", source: "rules-based",
+    };
+    for (const state of [{ loading: true, error: null }, { loading: false, error: "Refresh failed; previous snapshot retained." }]) {
+      const markup = renderToStaticMarkup(<ReportCard report={report} {...state} onRefresh={() => {}} />);
+      expect(markup).toContain(report.title);
+      expect(markup).toContain(report.signals[0]);
+      expect(markup).toContain(report.watchlist[0]);
+    }
+  });
   it("keeps the regime hero independent of factor coverage and research independent of charts", () => {
     const data = payload();
     data.regime = { ...evaluateRegime(resolvedInputs()), assessmentStatus: "PROVISIONAL", regime: "MIXED", dataQuality: 60, regimeClarity: 43 };
