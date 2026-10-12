@@ -118,9 +118,9 @@ function inflationCoreSeries(
 
 describe("getDashboardPayload", () => {
   it.each([
-    { failed: false, digest: "9266e1b695072ec600fad37a6211f7f7544ceba3e98a664474f53119d73a1ba8" },
-    { failed: true, digest: "f84ea10f35793c5b3762d6c1d721aa111fce01f13ba007f74d2a781ebdd760d7" },
-  ])("preserves the pre-telemetry full dashboard and brief snapshot (DOL failed=$failed)", async ({ failed, digest }) => {
+    { failed: false, digest: "9f7659d3c039800ace9c15d7d53c39f37a5eb87ee74b219261cc9950c36327f1" },
+    { failed: true, digest: "d45b810265195430af868268aa157297e8701c05a864c6b102e009f59b110d42" },
+  ])("preserves the full dashboard and brief snapshot after release-grade correction (DOL failed=$failed)", async ({ failed, digest }) => {
     const fetchImpl = fixtureFetch((url) => failed && url.hostname === "oui.doleta.gov");
     const monthly = (sourceId: string, identifier: string, unit: string, seasonalBasis: string, base = 100) => {
       const result = inflationCoreSeries(sourceId, identifier, unit, seasonalBasis);
@@ -142,9 +142,10 @@ describe("getDashboardPayload", () => {
     const policy = monthly("federal-reserve-policy-actions", "FOMC target range/action history", "percent", "Not seasonally adjusted");
     policy.observations = [{ ...policy.observations[0], observedAt: "2026-09-17", value: 3.875 }];
 
+    let currentSources: CoreObservationSeriesResult[] = [];
     const payload = await getDashboardPayload({
       fetchImpl, now,
-      loadCoreSources: async () => [
+      loadCoreSources: async () => (currentSources = [
         monthly("bls-cpi", "CUUR0000SA0L1E", "index (1982-84=100)", "NSA"),
         monthly("bls-cpi", "CUUR0000SA0", "index (1982-84=100)", "NSA"),
         monthly("bea-pce-income", "T20804-M / DPCCRG", "index (2017=100)", "SA"),
@@ -160,8 +161,20 @@ describe("getDashboardPayload", () => {
         quarterly("federal-reserve-credit-performance", "STFBQD%STFBAIL_XEOP_MA.Q", "percent", "SA", 2),
         quarterly("federal-reserve-credit-performance", "STFBQC%STFBAIL_MA.Q", "percent", "SA", 0.5),
         monthly("federal-reserve-h6-m2", "M2.M", "billions USD", "SA", 10000),
-      ],
+      ]),
     });
+    const priorReleaseGrades = await getDashboardPayload({
+      fetchImpl: fixtureFetch((url) => failed && url.hostname === "oui.doleta.gov"), now,
+      loadCoreSources: async () => currentSources.map((series) => series.sourceId === "dol-initial-claims" ? {
+        ...series,
+        observations: series.observations.map((observation) => ({ ...observation, releaseDateQuality: 1 })),
+      } : series),
+    });
+    expect(payload.observations).toEqual(priorReleaseGrades.observations);
+    expect(payload.scores).toEqual(priorReleaseGrades.scores);
+    expect(payload.regime).toEqual(priorReleaseGrades.regime);
+    expect([priorReleaseGrades.regime.dataQuality, payload.regime.dataQuality]).toEqual(failed ? [58, 58] : [61, 61]);
+    expect(payload.sourceRegistry.find((entry) => entry.id === "dol-initial-claims")?.releaseDateQuality).toBe(0.8);
     const snapshot = createDashboardSnapshot(payload);
     expect(snapshot.report).toMatchObject({
       regime: payload.regime.regime, assessmentStatus: payload.regime.assessmentStatus,
@@ -170,7 +183,7 @@ describe("getDashboardPayload", () => {
     });
     expect(payload.regime.factorReadiness.labor.coverage).toBe(failed ? 0.4 : 0.65);
     expect(payload.regime.assessmentStatus).toBe(failed ? "INSUFFICIENT_DATA" : "PROVISIONAL");
-    // Recorded from main@b5f9366 before adding telemetry, including the complete public payload and brief.
+    // Includes the complete public payload and brief after correcting date-only release grades.
     expect(createHash("sha256").update(JSON.stringify(snapshot)).digest("hex")).toBe(digest);
   });
 

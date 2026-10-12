@@ -246,7 +246,7 @@ function parseSeries(
       releasedAt,
       retrievedAt,
       firstSeenAt: null,
-      releaseDateQuality: releasedAt ? 1 : 0,
+      releaseDateQuality: releasedAt ? 0.8 : 0,
       version: null,
       vintage: null,
     };

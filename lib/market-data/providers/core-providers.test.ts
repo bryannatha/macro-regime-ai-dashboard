@@ -6,6 +6,9 @@ import { fetchBeaCoreSources, parseBeaSection1Sheets, parseBeaSection2Sheets } f
 import { fetchDolCoreClaims, parseDolCoreClaims, parseDolCoreClaimsReleaseText } from "./dol";
 import { fetchFederalReserveIndustrialProduction, parseFederalReserveH41Liquidity, parseFederalReserveIndustrialProduction, parseFederalReservePolicyActions } from "./federal-reserve-core";
 import { parseTreasuryRealYieldCore } from "./treasury";
+import { buildCoreFactors } from "../core-factors";
+import { createRegimeInputsFromCoreFactors } from "../regime-inputs";
+import { evaluateRegime } from "@/lib/regime";
 import { getSourceRegistry } from "@/lib/market-data/source-registry";
 import type { CoreObservationSeriesResult } from "@/lib/market-data/types";
 
@@ -252,7 +255,7 @@ describe("official anchor source adapters", () => {
     expect(source("dol-initial-claims")).toMatchObject({
       endpoint: "https://oui.doleta.gov/unemploy/weeklyRedirect.php",
       firstUsablePeriod: "Rolling one-year table in current weekly release; longer history unavailable",
-      releaseDateQuality: 1,
+      releaseDateQuality: 0.8,
       sourceHealth: "AVAILABLE",
     });
     expect(source("bea-gdp")).toMatchObject({
@@ -462,11 +465,15 @@ describe("official anchor source adapters", () => {
       seasonalBasis: "SAAR",
       observedAt: "2026-04-01",
       releasedAt: "2026-09-30",
+      releaseDateQuality: 0.8,
       retrievedAt,
       vintage: null,
     });
-    expect(level.observations.at(-1)?.unit).toBe("millions of chained (2017) dollars (SAAR)");
-    expect(growth.observations.at(-2)).toMatchObject({ releasedAt: null, vintage: null });
+    expect(level.observations.at(-1)).toMatchObject({
+      unit: "millions of chained (2017) dollars (SAAR)",
+      releaseDateQuality: 0.8,
+    });
+    expect(growth.observations.at(-2)).toMatchObject({ releasedAt: null, releaseDateQuality: 0, vintage: null });
   });
 
   it("selects BEA core PCE and real disposable income from exact rows, not headline PCE or nominal income", () => {
@@ -483,16 +490,21 @@ describe("official anchor source adapters", () => {
       value: 2_000_139,
       observedAt: "2026-08-01",
       releasedAt: "2026-09-30",
+      releaseDateQuality: 0.8,
     });
-    expect(pcePrice.observations.at(-1)).toMatchObject({ unit: "index (2017=100)", seasonalBasis: "SA" });
+    expect(pcePrice.observations.at(-1)).toMatchObject({ unit: "index (2017=100)", seasonalBasis: "SA", releaseDateQuality: 0.8 });
     expect(corePce).toMatchObject({ state: "AVAILABLE", parserStatus: "VERIFIED", historyStatus: "VERIFIED" });
     expect(corePce.observations.at(-1)).toMatchObject({
       value: 118.9,
       identifier: "T20804-M / DPCCRG",
       unit: "index (2017=100)",
       seasonalBasis: "SA",
+      releaseDateQuality: 0.8,
     });
-    expect(realPce.observations.at(-1)).toMatchObject({ unit: "millions of chained (2017) dollars (SAAR)", seasonalBasis: "SAAR" });
+    expect(realPce.observations.at(-1)).toMatchObject({
+      unit: "millions of chained (2017) dollars (SAAR)", seasonalBasis: "SAAR", releaseDateQuality: 0.8,
+    });
+    expect(corePce.observations.at(-2)).toMatchObject({ releasedAt: null, releaseDateQuality: 0, vintage: null });
 
     const noCorePce = makeBeaSection2();
     const pceSheet = noCorePce.find((sheet) => sheet.sheet === "T20804-M")!;
@@ -613,11 +625,66 @@ describe("official anchor source adapters", () => {
       observedAt: "2026-09-26",
       releasedAt: "2026-10-01",
       retrievedAt: "2026-10-05T15:00:00.000Z",
-      releaseDateQuality: 1,
+      releaseDateQuality: 0.8,
       version: "release:2026-10-01",
       vintage: null,
     });
+    expect(result.observations.every(({ releaseDateQuality }) => releaseDateQuality === 0.8)).toBe(true);
     expect(result.reason).toContain("longer history remains unavailable");
+  });
+
+  it("changes only release quality when date-only BEA and DOL evidence is graded precisely", () => {
+    const asOf = "2026-10-05T15:00:00.000Z";
+    const correctedSources = [
+      ...parseBeaSection1Sheets(makeBeaSection1(), asOf),
+      ...parseBeaSection2Sheets(makeBeaSection2(), asOf),
+      parseDolCoreClaimsReleaseText(dolReleaseText(), asOf),
+    ];
+    const priorSources = correctedSources.map((series) => ({
+      ...series,
+      observations: series.observations.map((observation) => ({
+        ...observation,
+        releaseDateQuality: observation.releasedAt ? 1 : observation.releaseDateQuality,
+      })),
+    }));
+    const before = buildCoreFactors(priorSources, asOf);
+    const after = buildCoreFactors(correctedSources, asOf);
+    const beforeInputs = createRegimeInputsFromCoreFactors(before);
+    const afterInputs = createRegimeInputsFromCoreFactors(after);
+    const beforeAssessment = evaluateRegime(beforeInputs);
+    const afterAssessment = evaluateRegime(afterInputs);
+
+    for (const key of Object.keys(before.factors) as Array<keyof typeof before.factors>) {
+      const previous = before.factors[key];
+      const current = after.factors[key];
+      expect(current).toMatchObject({
+        key: previous.key,
+        score: previous.score,
+        bounds: previous.bounds,
+        coverage: previous.coverage,
+        eligibleFamilies: previous.eligibleFamilies,
+        configuredFamilies: previous.configuredFamilies,
+        historyYears: previous.historyYears,
+        status: previous.status,
+      });
+      expect(current.families.map(({ score, bounds, coverage, eligible, status }) => ({ score, bounds, coverage, eligible, status })))
+        .toEqual(previous.families.map(({ score, bounds, coverage, eligible, status }) => ({ score, bounds, coverage, eligible, status })));
+      expect(current.releaseQuality).toBeLessThanOrEqual(previous.releaseQuality);
+    }
+    expect(afterInputs.qualitySlots.map((slot) => ({ ...slot, release: 0 })))
+      .toEqual(beforeInputs.qualitySlots.map((slot) => ({ ...slot, release: 0 })));
+    expect(afterAssessment).toMatchObject({
+      assessmentStatus: beforeAssessment.assessmentStatus,
+      regime: beforeAssessment.regime,
+      regimeClarity: beforeAssessment.regimeClarity,
+      factorReadiness: beforeAssessment.factorReadiness,
+    });
+    expect(before.factors.growth.releaseQuality).toBe(0.25);
+    expect(after.factors.growth.releaseQuality).toBe(0.2);
+    expect(afterInputs.qualitySlots.map((slot, index) => ({ index, before: beforeInputs.qualitySlots[index].release, after: slot.release }))
+      .filter(({ before, after }) => before !== after))
+      .toEqual([{ index: 4, before: 1, after: 0.8 }]);
+    expect([beforeAssessment.dataQuality, afterAssessment.dataQuality]).toEqual([16, 16]);
   });
 
   it("uses the latest observation rather than a fresh retrieval to determine DOL claims freshness", () => {
