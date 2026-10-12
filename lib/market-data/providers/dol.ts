@@ -288,7 +288,7 @@ export function parseDolCoreClaimsReleaseText(lines: string[], retrievedAt: stri
       releasedAt,
       retrievedAt,
       firstSeenAt: null,
-      releaseDateQuality: 1,
+      releaseDateQuality: 0.8,
       version: `release:${releasedAt}`,
       vintage: null,
     }));

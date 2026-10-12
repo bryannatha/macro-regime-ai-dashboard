@@ -139,7 +139,7 @@ export const SOURCE_REGISTRY: readonly SourceRegistryEntry[] = [
     units: ["thousand claims"],
     seasonalBases: ["SA"],
     expectedReleaseSchedule: "Thursday 8:30 a.m. Eastern release; week-ending observation and release dates remain distinct.",
-    releaseDateQuality: 1,
+    releaseDateQuality: 0.8,
     sourceHealth: "AVAILABLE",
     parserStatus: "VERIFIED",
     historyStatus: "PARTIAL",
