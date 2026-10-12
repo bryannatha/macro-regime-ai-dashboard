@@ -338,15 +338,82 @@ async function dolPdfLines(data: Uint8Array): Promise<string[]> {
   }
 }
 
+type DolHttpStage = "DOL_HTTP_REQUEST" | "DOL_HTTP_RESPONSE" | "DOL_HTTP_BODY";
+
+function observableDolMetadata<T>(read: () => T): T | null {
+  try {
+    return read() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function logDolHttpFailure(stage: DolHttpStage, attemptedAt: string, startedAt: number, response?: Response, failure?: { error: unknown }): void {
+  // Failure-only allowlists keep upstream content, credentials, and unrestricted URLs out of server logs.
+  try {
+    let responseHost: string | null = null;
+    let responsePath: string | null = null;
+    const responseUrl = observableDolMetadata(() => response?.url);
+    if (typeof responseUrl === "string" && responseUrl) {
+      try {
+        const url = new URL(responseUrl);
+        const official = ["oui.doleta.gov", "www.dol.gov", "dol.gov"].includes(url.hostname);
+        const knownPath = url.pathname === "/unemploy/weeklyRedirect.php" || url.pathname === "/ui/data.pdf" ||
+          /^\/press\/\d{4}\/\d{6}\.pdf$/.test(url.pathname);
+        if (official && knownPath && ["http:", "https:"].includes(url.protocol) && !url.port) {
+          responseHost = url.hostname;
+          responsePath = url.pathname;
+        }
+      } catch {
+        // A response without an observable official URL has unknown location metadata.
+      }
+    }
+    const status = observableDolMetadata(() => response?.status);
+    const redirected = observableDolMetadata(() => response?.redirected);
+    const httpStatus = typeof status === "number" && Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
+    const error = failure?.error;
+    const domName = observableDolMetadata(() => error instanceof DOMException ? error.name : null);
+    const exceptionClass = failure === undefined ? null : error instanceof TypeError ? "TypeError"
+      : error instanceof DOMException ? domName === "AbortError" || domName === "TimeoutError" ? domName : "DOMException"
+        : error instanceof Error ? "Error" : "UnknownError";
+    const cause = observableDolMetadata(() => error instanceof Error ? error.cause : null);
+    const code = observableDolMetadata(() => typeof cause === "object" && cause !== null ? (cause as { code?: unknown }).code : null);
+    const exceptionCode = typeof code === "string" && [
+      "ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_SOCKET",
+    ].includes(code) ? code : null;
+    console.warn(JSON.stringify({
+      event: "DOL_HTTP_FAILURE", sourceId: "dol-initial-claims", stage,
+      httpStatus, responseHost, responsePath,
+      redirected: typeof redirected === "boolean" ? redirected : null,
+      durationMs: Math.round(Math.max(0, performance.now() - startedAt) * 10) / 10,
+      attemptedAt, exceptionClass, exceptionCode,
+    }));
+  } catch {
+    // Telemetry must not change the adapter's public fail-closed result.
+  }
+}
+
 export async function fetchDolCoreClaims(options: AdapterOptions = {}): Promise<CoreObservationSeriesResult> {
   const now = options.now ?? new Date();
   const retrievedAt = fetchedAtFrom(now);
+  const attemptedAt = fetchedAtFrom();
+  const startedAt = performance.now();
+  let response: Response | undefined;
+  let stage: DolHttpStage | null = "DOL_HTTP_REQUEST";
   try {
-    const response = await (options.fetchImpl ?? fetch)(sourceUrl, cachedFetchOptions(3600));
-    if (!response.ok) return unavailableCoreClaims(null, "FAILED", "The DOL source returned an unsuccessful response.");
-    const lines = await dolPdfLines(new Uint8Array(await response.arrayBuffer()));
+    response = await (options.fetchImpl ?? fetch)(sourceUrl, cachedFetchOptions(3600));
+    stage = "DOL_HTTP_RESPONSE";
+    if (!response.ok) {
+      logDolHttpFailure(stage, attemptedAt, startedAt, response);
+      return unavailableCoreClaims(null, "FAILED", "The DOL source returned an unsuccessful response.");
+    }
+    stage = "DOL_HTTP_BODY";
+    const data = new Uint8Array(await response.arrayBuffer());
+    stage = null;
+    const lines = await dolPdfLines(data);
     return parseDolCoreClaimsReleaseText(lines, retrievedAt);
-  } catch {
+  } catch (error) {
+    if (stage !== null) logDolHttpFailure(stage, attemptedAt, startedAt, response, { error });
     return unavailableCoreClaims(null, "FAILED", "The official DOL weekly claims release is temporarily unavailable or invalid.");
   }
 }

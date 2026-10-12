@@ -1,8 +1,11 @@
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import type { ObservationKey } from "@/lib/types";
+import { createDashboardSnapshot } from "@/lib/dashboard-snapshot";
 import type { CoreObservationSeriesResult, CoreSourceObservation } from "./types";
 import { getDashboardPayload } from "./index";
+import { fetchDolCoreClaims } from "./providers/dol";
 
 const generatedAt = "2026-10-03T12:00:00.000Z";
 const now = new Date(generatedAt);
@@ -114,6 +117,63 @@ function inflationCoreSeries(
 }
 
 describe("getDashboardPayload", () => {
+  it.each([
+    { failed: false, digest: "9266e1b695072ec600fad37a6211f7f7544ceba3e98a664474f53119d73a1ba8" },
+    { failed: true, digest: "f84ea10f35793c5b3762d6c1d721aa111fce01f13ba007f74d2a781ebdd760d7" },
+  ])("preserves the pre-telemetry full dashboard and brief snapshot (DOL failed=$failed)", async ({ failed, digest }) => {
+    const fetchImpl = fixtureFetch((url) => failed && url.hostname === "oui.doleta.gov");
+    const monthly = (sourceId: string, identifier: string, unit: string, seasonalBasis: string, base = 100) => {
+      const result = inflationCoreSeries(sourceId, identifier, unit, seasonalBasis);
+      result.observations = result.observations.map((item, index) => ({ ...item, value: base + index }));
+      return result;
+    };
+    const quarterly = (sourceId: string, identifier: string, unit: string, seasonalBasis: string, value: number) => {
+      const result = monthly(sourceId, identifier, unit, seasonalBasis);
+      result.observations = Array.from({ length: 6 }, (_, index) => ({
+        ...result.observations[0], value,
+        observedAt: new Date(Date.UTC(2025, index * 3, 1)).toISOString().slice(0, 10),
+      }));
+      return result;
+    };
+    const treasury = monthly("treasury-real-yield", "TC_10YEAR", "percent", "Not seasonally adjusted");
+    treasury.observations = Array.from({ length: 40 }, (_, index) => new Date(Date.UTC(2026, 8, 1 + index)))
+      .filter((date) => date <= now && date.getUTCDay() !== 0 && date.getUTCDay() !== 6)
+      .map((date) => ({ ...treasury.observations[0], observedAt: date.toISOString().slice(0, 10), value: 1 }));
+    const policy = monthly("federal-reserve-policy-actions", "FOMC target range/action history", "percent", "Not seasonally adjusted");
+    policy.observations = [{ ...policy.observations[0], observedAt: "2026-09-17", value: 3.875 }];
+
+    const payload = await getDashboardPayload({
+      fetchImpl, now,
+      loadCoreSources: async () => [
+        monthly("bls-cpi", "CUUR0000SA0L1E", "index (1982-84=100)", "NSA"),
+        monthly("bls-cpi", "CUUR0000SA0", "index (1982-84=100)", "NSA"),
+        monthly("bea-pce-income", "T20804-M / DPCCRG", "index (2017=100)", "SA"),
+        monthly("bea-pce-income", "T20804-M / DPCERG", "index (2017=100)", "SA"),
+        quarterly("bea-gdp", "T10101-Q / A191RL", "percent SAAR", "SAAR", 2.1),
+        monthly("federal-reserve-g17-ip", "B50001", "index (G.17 total, release-defined base)", "SA", 1000),
+        monthly("bea-pce-income", "T20806-M / DPCERX", "millions of chained (2017) dollars (SAAR)", "SAAR", 1000),
+        monthly("bea-pce-income", "T20600-M / A067RX", "millions of chained (2017) dollars (SAAR)", "SAAR", 1000),
+        monthly("bls-labor", "CES0000000001", "thousand persons", "SA", 160000),
+        await fetchDolCoreClaims({ fetchImpl, now }), policy, treasury,
+        quarterly("federal-reserve-sloos", "Figure 1 Panel 1 / Large and medium", "percent net", "Not seasonally adjusted", 0),
+        quarterly("federal-reserve-sloos", "Figure 1 Panel 1 / Small", "percent net", "Not seasonally adjusted", 0),
+        quarterly("federal-reserve-credit-performance", "STFBQD%STFBAIL_XEOP_MA.Q", "percent", "SA", 2),
+        quarterly("federal-reserve-credit-performance", "STFBQC%STFBAIL_MA.Q", "percent", "SA", 0.5),
+        monthly("federal-reserve-h6-m2", "M2.M", "billions USD", "SA", 10000),
+      ],
+    });
+    const snapshot = createDashboardSnapshot(payload);
+    expect(snapshot.report).toMatchObject({
+      regime: payload.regime.regime, assessmentStatus: payload.regime.assessmentStatus,
+      dataQuality: payload.regime.dataQuality, regimeClarity: payload.regime.regimeClarity,
+      generatedAt: payload.generatedAt,
+    });
+    expect(payload.regime.factorReadiness.labor.coverage).toBe(failed ? 0.4 : 0.65);
+    expect(payload.regime.assessmentStatus).toBe(failed ? "INSUFFICIENT_DATA" : "PROVISIONAL");
+    // Recorded from main@b5f9366 before adding telemetry, including the complete public payload and brief.
+    expect(createHash("sha256").update(JSON.stringify(snapshot)).digest("hex")).toBe(digest);
+  });
+
   it("normalizes all public sources with generated and provider fetch timestamps", async () => {
     const payload = await getDashboardPayload({
       fetchImpl: fixtureFetch(),
