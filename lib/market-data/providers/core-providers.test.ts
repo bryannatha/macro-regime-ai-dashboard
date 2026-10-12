@@ -687,6 +687,58 @@ describe("official anchor source adapters", () => {
     expect([beforeAssessment.dataQuality, afterAssessment.dataQuality]).toEqual([16, 16]);
   });
 
+  it("propagates the DOL date-only grade through an eligible claims slot with precise payroll evidence", () => {
+    const asOf = "2026-10-05T15:00:00.000Z";
+    const claims = parseDolCoreClaimsReleaseText(dolReleaseText(), asOf);
+    const payroll: CoreObservationSeriesResult = {
+      sourceId: "bls-labor",
+      identifier: "CES0000000001",
+      state: "AVAILABLE",
+      parserStatus: "VERIFIED",
+      historyStatus: "PARTIAL",
+      retrievedAt: asOf,
+      reason: null,
+      observations: [{
+        sourceId: "bls-labor", identifier: "CES0000000001", value: 160_000,
+        unit: "thousand persons", seasonalBasis: "SA", observedAt: "2026-09-01",
+        releasedAt: "2026-10-01T12:30:00.000Z", retrievedAt: asOf, firstSeenAt: null,
+        releaseDateQuality: 1, version: null, vintage: null,
+      }],
+    };
+    const priorClaims = {
+      ...claims,
+      observations: claims.observations.map((observation) => ({ ...observation, releaseDateQuality: 1 })),
+    };
+    const before = buildCoreFactors([payroll, priorClaims], asOf);
+    const after = buildCoreFactors([payroll, claims], asOf);
+    const claimsSlot = (factors: typeof before.factors) => factors.labor.families.find(({ key }) => key === "claims")!.slots[0];
+
+    expect(claimsSlot(before.factors)).toMatchObject({ eligible: true, releaseQuality: 1 });
+    expect(claimsSlot(after.factors)).toMatchObject({
+      eligible: true, releaseQuality: 0.8,
+      score: claimsSlot(before.factors).score,
+      value: claimsSlot(before.factors).value,
+    });
+    expect([before.factors.labor.releaseQuality, after.factors.labor.releaseQuality]).toEqual([0.25, 0.2]);
+    const beforeInputs = createRegimeInputsFromCoreFactors(before);
+    const afterInputs = createRegimeInputsFromCoreFactors(after);
+    expect(afterInputs.qualitySlots.map((slot, index) => ({
+      before: beforeInputs.qualitySlots[index].release,
+      after: slot.release,
+    })).filter(({ before, after }) => before !== after)).toEqual([{ before: 1, after: 0.8 }]);
+    expect(afterInputs.qualitySlots.map((slot) => ({ ...slot, release: 0 })))
+      .toEqual(beforeInputs.qualitySlots.map((slot) => ({ ...slot, release: 0 })));
+    const beforeAssessment = evaluateRegime(beforeInputs);
+    const afterAssessment = evaluateRegime(afterInputs);
+    expect(afterAssessment).toMatchObject({
+      assessmentStatus: beforeAssessment.assessmentStatus,
+      regime: beforeAssessment.regime,
+      regimeClarity: beforeAssessment.regimeClarity,
+      factorReadiness: beforeAssessment.factorReadiness,
+    });
+    expect([beforeAssessment.dataQuality, afterAssessment.dataQuality]).toEqual([3, 3]);
+  });
+
   it("uses the latest observation rather than a fresh retrieval to determine DOL claims freshness", () => {
     const rows = ["2026-08-22", "2026-08-29", "2026-09-05", "2026-09-12"].map((isoDate) => {
       const [year, month, day] = isoDate.split("-").map(Number);

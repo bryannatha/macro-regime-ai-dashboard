@@ -118,9 +118,17 @@ function inflationCoreSeries(
 
 describe("getDashboardPayload", () => {
   it.each([
-    { failed: false, digest: "9f7659d3c039800ace9c15d7d53c39f37a5eb87ee74b219261cc9950c36327f1" },
-    { failed: true, digest: "d45b810265195430af868268aa157297e8701c05a864c6b102e009f59b110d42" },
-  ])("preserves the full dashboard and brief snapshot after release-grade correction (DOL failed=$failed)", async ({ failed, digest }) => {
+    {
+      failed: false,
+      priorDigest: "9266e1b695072ec600fad37a6211f7f7544ceba3e98a664474f53119d73a1ba8",
+      digest: "9f7659d3c039800ace9c15d7d53c39f37a5eb87ee74b219261cc9950c36327f1",
+    },
+    {
+      failed: true,
+      priorDigest: "f84ea10f35793c5b3762d6c1d721aa111fce01f13ba007f74d2a781ebdd760d7",
+      digest: "d45b810265195430af868268aa157297e8701c05a864c6b102e009f59b110d42",
+    },
+  ])("preserves the full dashboard and brief snapshot after release-grade correction (DOL failed=$failed)", async ({ failed, priorDigest, digest }) => {
     const fetchImpl = fixtureFetch((url) => failed && url.hostname === "oui.doleta.gov");
     const monthly = (sourceId: string, identifier: string, unit: string, seasonalBasis: string, base = 100) => {
       const result = inflationCoreSeries(sourceId, identifier, unit, seasonalBasis);
@@ -176,6 +184,23 @@ describe("getDashboardPayload", () => {
     expect([priorReleaseGrades.regime.dataQuality, payload.regime.dataQuality]).toEqual(failed ? [58, 58] : [61, 61]);
     expect(payload.sourceRegistry.find((entry) => entry.id === "dol-initial-claims")?.releaseDateQuality).toBe(0.8);
     const snapshot = createDashboardSnapshot(payload);
+    const priorSnapshot = createDashboardSnapshot({
+      ...priorReleaseGrades,
+      sourceRegistry: priorReleaseGrades.sourceRegistry.map((entry) => entry.id === "dol-initial-claims"
+        ? { ...entry, releaseDateQuality: 1 }
+        : entry),
+    });
+    expect(createHash("sha256").update(JSON.stringify(priorSnapshot)).digest("hex")).toBe(priorDigest);
+    expect({
+      ...snapshot,
+      payload: {
+        ...snapshot.payload,
+        sourceRegistry: snapshot.payload.sourceRegistry.map((entry) => entry.id === "dol-initial-claims"
+          ? { ...entry, releaseDateQuality: 1 }
+          : entry),
+      },
+    }).toEqual(priorSnapshot);
+    expect(snapshot.report).toEqual(priorSnapshot.report);
     expect(snapshot.report).toMatchObject({
       regime: payload.regime.regime, assessmentStatus: payload.regime.assessmentStatus,
       dataQuality: payload.regime.dataQuality, regimeClarity: payload.regime.regimeClarity,
