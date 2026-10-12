@@ -170,6 +170,40 @@ describe("DOL HTTP failure observability", () => {
     expect(warnings.mock.calls[0][0]).not.toContain("private");
   });
 
+  it.each(["AbortError", "TimeoutError"])("preserves the observable native DOMException classification %s", async (name) => {
+    const error = new DOMException("private upstream details", name);
+    const result = await fetchDolCoreClaims({ fetchImpl: vi.fn<typeof fetch>().mockRejectedValue(error), now });
+    expect(result).toMatchObject(genericFailure);
+    expect(warnings).toHaveBeenCalledOnce();
+    expect(JSON.parse(warnings.mock.calls[0][0])).toMatchObject({ stage: "DOL_HTTP_REQUEST", exceptionClass: name });
+    expect(warnings.mock.calls[0][0]).not.toContain("private");
+  });
+
+  it("retains known stage and HTTP status when optional response URL metadata cannot be read", async () => {
+    const response = new Response(null, { status: 503 });
+    Object.defineProperty(response, "url", { get: () => { throw new Error("private metadata"); } });
+    const result = await fetchDolCoreClaims({ fetchImpl: vi.fn<typeof fetch>().mockResolvedValue(response), now });
+    expect(result).toMatchObject({ state: "FAILED", reason: "The DOL source returned an unsuccessful response." });
+    expect(warnings).toHaveBeenCalledOnce();
+    expect(JSON.parse(warnings.mock.calls[0][0])).toMatchObject({ stage: "DOL_HTTP_RESPONSE", httpStatus: 503, responseHost: null, responsePath: null });
+  });
+
+  it("retains the known exception class when optional cause metadata cannot be read", async () => {
+    const error = new TypeError("private network details");
+    Object.defineProperty(error, "cause", { get: () => { throw new Error("private cause"); } });
+    const result = await fetchDolCoreClaims({ fetchImpl: vi.fn<typeof fetch>().mockRejectedValue(error), now });
+    expect(result).toMatchObject(genericFailure);
+    expect(warnings).toHaveBeenCalledOnce();
+    expect(JSON.parse(warnings.mock.calls[0][0])).toMatchObject({ stage: "DOL_HTTP_REQUEST", httpStatus: null, exceptionClass: "TypeError", exceptionCode: null });
+  });
+
+  it("distinguishes a caught undefined rejection from an HTTP response without an exception", async () => {
+    const result = await fetchDolCoreClaims({ fetchImpl: vi.fn<typeof fetch>().mockRejectedValue(undefined), now });
+    expect(result).toMatchObject(genericFailure);
+    expect(warnings).toHaveBeenCalledOnce();
+    expect(JSON.parse(warnings.mock.calls[0][0])).toMatchObject({ stage: "DOL_HTTP_REQUEST", exceptionClass: "UnknownError", exceptionCode: null });
+  });
+
   it("distinguishes response-body failure from the initial request", async () => {
     const response = responseWithUrl(new Response(null, { status: 200 }));
     vi.spyOn(response, "arrayBuffer").mockRejectedValue(new TypeError("private stream failure"));

@@ -340,14 +340,23 @@ async function dolPdfLines(data: Uint8Array): Promise<string[]> {
 
 type DolHttpStage = "DOL_HTTP_REQUEST" | "DOL_HTTP_RESPONSE" | "DOL_HTTP_BODY";
 
-function logDolHttpFailure(stage: DolHttpStage, attemptedAt: string, startedAt: number, response?: Response, error?: unknown): void {
+function observableDolMetadata<T>(read: () => T): T | null {
+  try {
+    return read() ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function logDolHttpFailure(stage: DolHttpStage, attemptedAt: string, startedAt: number, response?: Response, failure?: { error: unknown }): void {
   // Failure-only allowlists keep upstream content, credentials, and unrestricted URLs out of server logs.
   try {
     let responseHost: string | null = null;
     let responsePath: string | null = null;
-    if (response?.url) {
+    const responseUrl = observableDolMetadata(() => response?.url);
+    if (typeof responseUrl === "string" && responseUrl) {
       try {
-        const url = new URL(response.url);
+        const url = new URL(responseUrl);
         const official = ["oui.doleta.gov", "www.dol.gov", "dol.gov"].includes(url.hostname);
         const knownPath = url.pathname === "/unemploy/weeklyRedirect.php" || url.pathname === "/ui/data.pdf" ||
           /^\/press\/\d{4}\/\d{6}\.pdf$/.test(url.pathname);
@@ -359,21 +368,23 @@ function logDolHttpFailure(stage: DolHttpStage, attemptedAt: string, startedAt: 
         // A response without an observable official URL has unknown location metadata.
       }
     }
-    const status = response?.status;
+    const status = observableDolMetadata(() => response?.status);
+    const redirected = observableDolMetadata(() => response?.redirected);
     const httpStatus = typeof status === "number" && Number.isInteger(status) && status >= 100 && status <= 599 ? status : null;
-    const exceptionClass = error === undefined ? null : error instanceof TypeError ? "TypeError"
-      : error instanceof Error ? "Error" : error instanceof DOMException
-        ? ["AbortError", "TimeoutError"].includes(error.name) ? error.name : "DOMException" : "UnknownError";
-    const cause = error instanceof Error && typeof error.cause === "object" && error.cause !== null
-      ? error.cause as { code?: unknown } : null;
-    const code = cause?.code;
+    const error = failure?.error;
+    const domName = observableDolMetadata(() => error instanceof DOMException ? error.name : null);
+    const exceptionClass = failure === undefined ? null : error instanceof TypeError ? "TypeError"
+      : error instanceof DOMException ? domName === "AbortError" || domName === "TimeoutError" ? domName : "DOMException"
+        : error instanceof Error ? "Error" : "UnknownError";
+    const cause = observableDolMetadata(() => error instanceof Error ? error.cause : null);
+    const code = observableDolMetadata(() => typeof cause === "object" && cause !== null ? (cause as { code?: unknown }).code : null);
     const exceptionCode = typeof code === "string" && [
       "ECONNRESET", "ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "ETIMEDOUT", "UND_ERR_CONNECT_TIMEOUT", "UND_ERR_SOCKET",
     ].includes(code) ? code : null;
     console.warn(JSON.stringify({
       event: "DOL_HTTP_FAILURE", sourceId: "dol-initial-claims", stage,
       httpStatus, responseHost, responsePath,
-      redirected: typeof response?.redirected === "boolean" ? response.redirected : null,
+      redirected: typeof redirected === "boolean" ? redirected : null,
       durationMs: Math.round(Math.max(0, performance.now() - startedAt) * 10) / 10,
       attemptedAt, exceptionClass, exceptionCode,
     }));
@@ -402,7 +413,7 @@ export async function fetchDolCoreClaims(options: AdapterOptions = {}): Promise<
     const lines = await dolPdfLines(data);
     return parseDolCoreClaimsReleaseText(lines, retrievedAt);
   } catch (error) {
-    if (stage !== null) logDolHttpFailure(stage, attemptedAt, startedAt, response, error);
+    if (stage !== null) logDolHttpFailure(stage, attemptedAt, startedAt, response, { error });
     return unavailableCoreClaims(null, "FAILED", "The official DOL weekly claims release is temporarily unavailable or invalid.");
   }
 }
