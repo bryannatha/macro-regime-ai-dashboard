@@ -409,7 +409,31 @@ function recentReclassificationBreak(html: string, firstDate: string, lastDate: 
   });
 }
 
-function preservedH8Breaks(html: string, firstDate: string, lastDate: string, retrievedAt: string): string[] | null {
+type H8Break = { date: string; kind: "reclassification break" | "loan divestiture break" };
+
+function h8LoanDivestiture(text: string, noteDate: string): boolean | null {
+  if (!/\bdivested\b/i.test(text)) return false;
+  const bankScope = "(?:domestically chartered commercial banks|all commercial banks|foreign-related institutions)";
+  const actions = Array.from(text.matchAll(new RegExp(`\\b${bankScope}\\s+divested\\b`, "gi")));
+  const events = Array.from(text.matchAll(new RegExp(`\\b${bankScope}\\s+divested\\s+\\$[\\d,]+(?:\\.\\d+)?\\s+(?:billion|million)\\s+in assets(?: and liabilities)? to (nonbank institutions|other commercial banks) in the week ending\\s+([A-Za-z]+\\s+\\d{1,2},?\\s+\\d{4})\\.`, "gi")));
+  if (events.length !== actions.length || events.some((event) => longDate(event[2]) !== noteDate)) return null;
+  const nonbank = events.filter((event) => /^nonbank institutions$/i.test(event[1]));
+  if (!nonbank.length) return events.length > 0 || /^(?:credit unions|thrifts|nonbank institutions)\s+divested\b/i.test(text) ? false : null;
+  if (nonbank.length !== 1) return null;
+  const event = nonbank[0];
+  const following = text.slice(event.index! + event[0].length).trim();
+  const affected = /^The major asset items affected were the following:\s*(.*?\b(?:billion|million))\.(?=\s|$)/i.exec(following)?.[1];
+  if (!affected) return null;
+  const items = affected.split(";").map((item) => /^(.+),\s*(-?\$[\d,]+(?:\.\d+)?)\s+(?:billion|million)\.?$/i.exec(item.trim().replace(/^and\s+/i, "")));
+  if (items.some((item) => item === null)) return null;
+  // These are components of line 9; allowances, securities and interbank loans are not.
+  const loans = /^(?:loans and leases in bank credit|commercial and industrial loans|real estate loans|consumer loans|all other loans and leases)\b/i;
+  const excluded = /^(?:securities in bank credit|Treasury and agency securities|other securities|allowance for (?:credit losses on loans and leases|loan and lease losses)|cash assets|total federal funds sold and reverse RPs|loans to commercial banks|other assets including trading assets)\b/i;
+  if (items.some((item) => !Number.isFinite(Number(item![2].replace(/[$,]/g, ""))) || !loans.test(item![1]) && !excluded.test(item![1]))) return null;
+  return items.some((item) => loans.test(item![1]) && Number(item![2].replace(/[$,]/g, "")) !== 0);
+}
+
+function preservedH8Breaks(html: string, firstDate: string, lastDate: string, retrievedAt: string): H8Break[] | null {
   const text = htmlText(html);
   const updated = /Last Update:\s*([A-Za-z]+\s+\d{1,2},?\s+\d{4})/i.exec(text);
   const updatedAt = updated ? longDate(updated[1]) : null;
@@ -424,13 +448,23 @@ function preservedH8Breaks(html: string, firstDate: string, lastDate: string, re
     if (!heading) return null;
     const date = longDate(htmlText(heading[2]));
     if (!date || date.replaceAll("-", "") !== heading[1] || date > updatedAt) return null;
-    return { key: heading[1], date, text: htmlText(section) };
+    const body = htmlText(section.replace(heading[0], ""));
+    if (!body || !/[.!?]$/.test(body)) return null;
+    return { key: heading[1], date, text: body };
   });
   // Verify the archive index and dated sections together: a truncated page is not evidence of no break.
   if (!indexed.length || notes.some((note) => note === null) || indexed.length !== notes.length ||
       new Set(indexed).size !== indexed.length || new Set(notes.map((note) => note!.key)).size !== notes.length ||
       notes.some((note) => !indexed.includes(note!.key)) || notes.every((note) => note!.date > firstDate)) return null;
-  return notes.filter((note) => /reclassif|definitional clarification/i.test(note!.text)).map((note) => note!.date);
+  const breaks: H8Break[] = [];
+  for (const note of notes) {
+    if (/reclassif|definitional clarification/i.test(note!.text)) breaks.push({ date: note!.date, kind: "reclassification break" });
+    if (note!.date < firstDate || note!.date > lastDate) continue;
+    const divestiture = h8LoanDivestiture(note!.text, note!.date);
+    if (divestiture === null) return null;
+    if (divestiture) breaks.push({ date: note!.date, kind: "loan divestiture break" });
+  }
+  return breaks;
 }
 
 export function parseFederalReserveH8Loans(html: string, retrievedAt: string): CoreObservationSeriesResult {
@@ -514,12 +548,14 @@ export function parseFederalReserveH8DdpCsv(
     const firstRecentDate = sorted.at(-17)!.date;
     const lastRecentDate = sorted.at(-1)!.date;
     const breaks = preservedH8Breaks(preservedNotesHtml, firstRecentDate, lastRecentDate, retrievedAt);
-    const eligibilityBlockReason = recentReclassificationBreak(releaseHtml, firstRecentDate, lastRecentDate) ||
-      breaks?.some((date) => date >= firstRecentDate && date <= lastRecentDate)
-      ? "The H.8 credit-volume comparison window crosses a disclosed reclassification break."
-      : breaks === null
-        ? "The H.8 preserved official break metadata could not be verified for this comparison window."
-        : null;
+    const activeBreaks = breaks?.filter(({ date }) => date >= firstRecentDate && date <= lastRecentDate) ?? [];
+    const eligibilityBlockReason = activeBreaks.length
+      ? `The H.8 credit-volume comparison window crosses a disclosed structural break: ${activeBreaks.map(({ date, kind }) => `${date} (${kind})`).join("; ")}.`
+      : recentReclassificationBreak(releaseHtml, firstRecentDate, lastRecentDate)
+        ? "The H.8 credit-volume comparison window crosses a disclosed reclassification break."
+        : breaks === null
+          ? "The H.8 preserved official break metadata could not be verified for this comparison window."
+          : null;
     const observations = sorted.map(({ date, value }) => observation(
       spec.sourceId, spec.identifier, value, "billions USD", "SA", date, retrievedAt,
     ));
