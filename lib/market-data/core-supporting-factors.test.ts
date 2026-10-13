@@ -17,6 +17,8 @@ import {
   transformRealM2,
 } from "./core-transformations";
 import { buildCoreFactors } from "./core-factors";
+import { createRegimeInputsFromCoreFactors } from "./regime-inputs";
+import { evaluateRegime } from "@/lib/regime";
 import { getSourceRegistry, prepareCurrentCoreSources } from "./source-registry";
 import { FEDERAL_RESERVE_SUPPORT_IDENTIFIERS as identifiers } from "./providers/federal-reserve-core";
 
@@ -115,6 +117,17 @@ const h8PreservedNotes = `<title>Assets and Liabilities of Commercial Banks in t
   <p>As of the week ending July 1, 2026, foreign-related institutions reclassified $6.1 billion.</p></div>
   <div class="datanote"><h3><a name="notes_20260107">January 7, 2026</a></h3><p>A thrift converted to a commercial bank.</p></div>
   <div id="lastUpdate">Last Update: October 9, 2026</div>`;
+
+const h8SeptemberDivestiture = "Domestically chartered commercial banks divested $5.2 billion in assets to nonbank institutions in the week ending September 30, 2026. The major asset items affected were the following: consumer loans, other consumer loans, automobile loans, -$5.2 billion; Allowance for credit losses on loans and leases, -$0.9 billion; and cash assets, $5.2 billion. The residual (assets less liabilities) decreased $0.9 billion.";
+
+function h8StructuralNotes(notice = h8SeptemberDivestiture): string {
+  return h8PreservedNotes
+    .replace('<a href="#notes_20260701">', '<a href="#notes_20260930">September 30, 2026</a><a href="#notes_20260701">')
+    .replace('<div class="datanote">', `<div class="datanote"><h3><a name="notes_20260930">September 30, 2026</a></h3><p>${notice}</p></div><div class="datanote">`)
+    .replace("October 9, 2026", "February 5, 2027");
+}
+
+const h8StructuralRetrievedAt = "2027-02-06T12:00:00.000Z";
 
 const sloosHtml = `<h3>Figure 1: Measures of Supply and Demand for C&amp;I Loans by Size of Firm Seeking Loans</h3>
 <table><thead>
@@ -344,6 +357,142 @@ describe("approved supporting source parsers", () => {
     expect(transformCreditVolume(result).value).toBeNull();
   });
 
+  it.each([
+    ["July only", "2026-06-03", true, false],
+    ["September only", "2026-07-08", false, true],
+    ["both events", "2026-06-10", true, true],
+    ["neither event", "2026-10-07", false, false],
+  ] as const)("retains each applicable H.8 structural blocker in a 17-week window (%s)", (_, start, july, september) => {
+    const csv = h8DdpCsv(dates(start, 17, 7));
+    const result = parseFederalReserveH8DdpCsv(csv, h8StructuralRetrievedAt, "", h8StructuralNotes());
+    expect(result.observations).toEqual(parseFederalReserveH8DdpCsv(csv, h8StructuralRetrievedAt).observations);
+    expect(result).toMatchObject({ state: "AVAILABLE", parserStatus: "VERIFIED", historyStatus: "VERIFIED" });
+    if (july || september) {
+      expect(transformCreditVolume(result).value).toBeNull();
+      if (july) expect(result.eligibilityBlockReason).toContain("reclassification break");
+      if (september) {
+        expect(result.eligibilityBlockReason).toContain("loan divestiture");
+        expect(result.eligibilityBlockReason).toContain("2026-09-30");
+      }
+    } else {
+      expect(result.eligibilityBlockReason).toBeNull();
+      expect(transformCreditVolume(result).value).not.toBeNull();
+    }
+    expect(result.reason).toContain(h8NotesEndpoint);
+  });
+
+  it.each([
+    ["consumer loans, other consumer loans, automobile loans, -$5.2 billion", true],
+    ["commercial and industrial loans, -$5.2 billion", true],
+    ["real estate loans, residential real estate loans, -$5.2 billion", true],
+    ["all other loans and leases, loans to nondepository financial institutions, -$5.2 billion", true],
+    ["Treasury and agency securities, non-MBS, -$5.2 billion", false],
+    ["loans to commercial banks, -$5.2 billion", false],
+    ["total federal funds sold and reverse RPs, -$5.2 billion", false],
+    ["consumer loans, $0.0 billion; Treasury and agency securities, -$5.2 billion", false],
+  ] as const)("checks the affected asset's applicability to B1020NCBA (%s)", (asset, relevant) => {
+    const notice = h8SeptemberDivestiture.replace("consumer loans, other consumer loans, automobile loans, -$5.2 billion", asset);
+    const result = parseFederalReserveH8DdpCsv(h8DdpCsv(dates("2026-07-08", 17, 7)), h8StructuralRetrievedAt, "", h8StructuralNotes(notice));
+    expect(result.eligibilityBlockReason === null).toBe(!relevant);
+    expect(transformCreditVolume(result).value === null).toBe(relevant);
+  });
+
+  it.each([
+    h8SeptemberDivestiture.replace("Domestically chartered commercial banks", "Credit unions"),
+    h8SeptemberDivestiture.replace("to nonbank institutions", "to other commercial banks"),
+    "The release incorporates revisions to consumer loans and seasonal factors. No structural transaction occurred.",
+  ])("does not invent a bank-volume divestiture from unrelated scope or revisions (%#)", (notice) => {
+    const result = parseFederalReserveH8DdpCsv(h8DdpCsv(dates("2026-07-08", 17, 7)), h8StructuralRetrievedAt, "", h8StructuralNotes(notice));
+    expect(result.eligibilityBlockReason).toBeNull();
+    expect(transformCreditVolume(result).value).not.toBeNull();
+  });
+
+  it.each([
+    h8StructuralNotes().replace("week ending September 30, 2026", "week ending September 23, 2026"),
+    h8StructuralNotes().replace("consumer loans, other consumer loans, automobile loans, -$5.2 billion", "consumer loans, other consumer loans, automobile loans"),
+    h8StructuralNotes().replace(/The major asset items affected were the following:[\s\S]*?The residual/, "The residual"),
+    h8StructuralNotes().replace(`<p>${h8SeptemberDivestiture}</p>`, `<div><p>${h8SeptemberDivestiture}</p></div>`),
+    h8StructuralNotes().replace(/<p>Domestically[\s\S]*?<\/p>/, "<p>Domestically chartered commercial banks divested $5.2 billion in assets to nonbank institutions in the week ending September 30, 2026.</p>"),
+    h8StructuralNotes().replace('name="notes_20260930"', 'name="notes_20260931"'),
+    h8StructuralNotes().replace("February 5, 2027", "October 9, 2026"),
+    h8StructuralNotes(""),
+    h8StructuralNotes("Domestically chartered commercial banks"),
+    h8StructuralNotes("Domestically chartered commercial banks divest"),
+    h8StructuralNotes().replace("Domestically chartered commercial banks", "Domestically chartered banks"),
+    h8StructuralNotes().replace("consumer loans, other consumer loans, automobile loans", "unclassified loan portfolio"),
+    h8StructuralNotes("Domestically chartered commercial banks divested $5.2 billion in assets to nonbank institutions in the week ending September 30, 2026. The major asset items affected were the following: Treasury and agency securities, -$5.2 billion"),
+    "",
+  ])("withholds when September notice applicability or completeness cannot be verified (%#)", (notes) => {
+    const csv = h8DdpCsv(dates("2026-07-08", 17, 7));
+    const result = parseFederalReserveH8DdpCsv(csv, h8StructuralRetrievedAt, "", notes);
+    expect(result.observations).toEqual(parseFederalReserveH8DdpCsv(csv, h8StructuralRetrievedAt).observations);
+    expect(transformCreditVolume(result).value).toBeNull();
+    expect(result.eligibilityBlockReason).toContain("break metadata");
+  });
+
+  it("retains the September event when it rolls off current-release notes", async () => {
+    const result = await fetchFederalReserveH8Loans({
+      now: new Date(h8StructuralRetrievedAt),
+      fetchImpl: async (input) => {
+        const url = String(input);
+        if (url === h8NotesEndpoint) return new Response(h8StructuralNotes());
+        if (url.includes("/current/")) return new Response("<h2>Release Date: February 5, 2027</h2><p>The release incorporates revisions.</p>");
+        if (url.includes("choose.aspx")) return new Response(h8DdpChooser);
+        return new Response(h8DdpCsv(dates("2026-07-08", 17, 7)));
+      },
+    });
+    expect(result.eligibilityBlockReason).toContain("2026-09-30");
+    expect(transformCreditVolume(result).value).toBeNull();
+  });
+
+  it("does not let a separate interbank transaction cancel a proven nonbank divestiture", () => {
+    const notes = h8StructuralNotes(`${h8SeptemberDivestiture} Separately, loans were transferred to other commercial banks.`);
+    const result = parseFederalReserveH8DdpCsv(h8DdpCsv(dates("2026-07-08", 17, 7)), h8StructuralRetrievedAt, "", notes);
+    expect(result.eligibilityBlockReason).toContain("loan divestiture");
+    expect(transformCreditVolume(result).value).toBeNull();
+  });
+
+  it("does not let an unrelated institution's divestiture cancel the bank event", () => {
+    const notes = h8StructuralNotes(`${h8SeptemberDivestiture} Credit unions divested assets to nonbank institutions.`);
+    const result = parseFederalReserveH8DdpCsv(h8DdpCsv(dates("2026-07-08", 17, 7)), h8StructuralRetrievedAt, "", notes);
+    expect(result.eligibilityBlockReason).toContain("loan divestiture");
+    expect(transformCreditVolume(result).value).toBeNull();
+  });
+
+  it("checks the nonbank event even when a separate interbank divestiture appears first", () => {
+    const interbank = h8SeptemberDivestiture.replace("to nonbank institutions", "to other commercial banks");
+    const notes = h8StructuralNotes(`${interbank} ${h8SeptemberDivestiture}`);
+    const result = parseFederalReserveH8DdpCsv(h8DdpCsv(dates("2026-07-08", 17, 7)), h8StructuralRetrievedAt, "", notes);
+    expect(result.eligibilityBlockReason).toContain("loan divestiture");
+    expect(transformCreditVolume(result).value).toBeNull();
+  });
+
+  it("fails closed on multiple nonbank transactions whose asset lists are ambiguous", () => {
+    const securities = h8SeptemberDivestiture.replace("consumer loans, other consumer loans, automobile loans", "Treasury and agency securities, non-MBS");
+    const result = parseFederalReserveH8DdpCsv(h8DdpCsv(dates("2026-07-08", 17, 7)), h8StructuralRetrievedAt, "", h8StructuralNotes(`${securities} ${h8SeptemberDivestiture}`));
+    expect(result.eligibilityBlockReason).toContain("break metadata");
+    expect(transformCreditVolume(result).value).toBeNull();
+  });
+
+  it("preserves new revised observations without removing a September blocker", () => {
+    const original = h8DdpCsv(dates("2026-07-08", 17, 7));
+    const revised = original.replace('"14000000"', '"14000100"');
+    const before = parseFederalReserveH8DdpCsv(original, h8StructuralRetrievedAt, "", h8StructuralNotes());
+    const after = parseFederalReserveH8DdpCsv(revised, h8StructuralRetrievedAt, "", h8StructuralNotes());
+    expect(after.observations[0].value - before.observations[0].value).toBeCloseTo(0.1, 8);
+    expect(after.eligibilityBlockReason).toEqual(before.eligibilityBlockReason);
+    expect(after.eligibilityBlockReason).toContain("loan divestiture");
+    expect(transformCreditVolume(after).value).toBeNull();
+  });
+
+  it("does not promote eligibility solely because both event dates have left the window", () => {
+    const csv = h8DdpCsv(dates("2026-10-07", 17, 7));
+    const missingWeek = csv.split("\r\n").filter((row) => !row.startsWith('"2026-11-04"')).join("\r\n");
+    const result = parseFederalReserveH8DdpCsv(missingWeek, h8StructuralRetrievedAt, "", h8StructuralNotes());
+    expect(result.state).toBe("MISSING");
+    expect(transformCreditVolume(result).value).toBeNull();
+  });
+
   it("rejects missing or ambiguous credit-performance series instead of guessing the rate", () => {
     const keys = [
       ["STFBQD%STFBAIL_XEOP_MA.Q", "128", "SA"],
@@ -476,6 +625,35 @@ describe("supporting factor assembly", () => {
     expect(after.creditConditions).toMatchObject({ coverage: 0.7, eligibleFamilies: 2, status: "LIMITED" });
     expect(after.creditConditions.families.filter(({ key }) => key !== "bankVolume")).toEqual(before.creditConditions.families.filter(({ key }) => key !== "bankVolume"));
     for (const key of ["inflation", "growth", "labor", "policyRates", "liquidityProxy"] as const) expect(after[key]).toEqual(before[key]);
+  });
+
+  it("changes only bank-volume eligibility for identical inputs after July rolls out", () => {
+    const sources = supportingSources(false);
+    const csv = h8DdpCsv(dates("2026-07-08", 17, 7));
+    const oldNotes = h8PreservedNotes.replace("October 9, 2026", "February 5, 2027");
+    const beforeSeries = parseFederalReserveH8DdpCsv(csv, h8StructuralRetrievedAt, "", oldNotes);
+    const afterSeries = parseFederalReserveH8DdpCsv(csv, h8StructuralRetrievedAt, "", h8StructuralNotes());
+    expect(afterSeries.observations).toEqual(beforeSeries.observations);
+    const before = buildCoreFactors([...sources, beforeSeries], h8StructuralRetrievedAt).factors;
+    const after = buildCoreFactors([...sources, afterSeries], h8StructuralRetrievedAt).factors;
+    expect(before.creditConditions).toMatchObject({ coverage: 1, eligibleFamilies: 3, status: "READY" });
+    expect(after.creditConditions).toMatchObject({ coverage: 0.7, eligibleFamilies: 2, status: "LIMITED" });
+    expect(after.creditConditions.families.filter(({ key }) => key !== "bankVolume")).toEqual(before.creditConditions.families.filter(({ key }) => key !== "bankVolume"));
+    for (const key of ["inflation", "growth", "labor", "policyRates", "liquidityProxy"] as const) expect(after[key]).toEqual(before[key]);
+  });
+
+  it("preserves current numerical and assessment outputs when July already withholds bank volume", () => {
+    const sources = supportingSources(false);
+    const csv = h8DdpCsv(dates("2026-06-10", 17, 7));
+    const oldNotes = h8PreservedNotes.replace("October 9, 2026", "February 5, 2027");
+    const before = buildCoreFactors([...sources, parseFederalReserveH8DdpCsv(csv, h8StructuralRetrievedAt, "", oldNotes)], h8StructuralRetrievedAt);
+    const after = buildCoreFactors([...sources, parseFederalReserveH8DdpCsv(csv, h8StructuralRetrievedAt, "", h8StructuralNotes())], h8StructuralRetrievedAt);
+    const beforeInputs = createRegimeInputsFromCoreFactors(before);
+    const afterInputs = createRegimeInputsFromCoreFactors(after);
+    expect(afterInputs).toEqual(beforeInputs);
+    expect(evaluateRegime(afterInputs)).toEqual(evaluateRegime(beforeInputs));
+    expect(after.momentum.creditVolume.reason).toContain("2026-09-30");
+    expect(before.momentum.creditVolume.reason).not.toContain("2026-09-30");
   });
 
   it("registers the five approved Federal Reserve supporting feeds with fixed family allocations", () => {
