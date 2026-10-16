@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import type { CoreObservationSeriesResult, CoreSourceObservation } from "./types";
 import {
@@ -537,9 +538,80 @@ describe("approved supporting transforms", () => {
     const small = series(sloosSource, "Figure 1 Panel 1 / Small", [-20, -10, 0, 20], surveyDates, "percent net", "Not seasonally adjusted");
     const metric = transformCreditStandards(large, "Figure 1 Panel 1 / Large and medium");
 
-    expect(metric).toMatchObject({ value: 20, unit: "percent net", historyPoints: 4 });
+    expect(metric).toMatchObject({ value: 20, unit: "percent net", historyPoints: 1, historyYears: 0.25 });
     expect(metric.score).toBeCloseTo(49, 8);
     expect(transformCreditStandards(small, "Figure 1 Panel 1 / Small").score).toBeCloseTo(metric.score!, 8);
+  });
+
+  it.each([4, 5, 23, 146])("counts transformed SLOOS endpoints rather than the %i raw surveys", (count) => {
+    for (const identifier of [identifiers.sloosLargeMedium, identifiers.sloosSmall]) {
+      const input = series(sloosSource, identifier, Array.from({ length: count }, (_, index) => index % 30),
+        quarterlyDates(count, 1990, 2), "percent net", "Not seasonally adjusted");
+      const metric = transformCreditStandards(input, identifier);
+      const currentWindow = transformCreditStandards({ ...input, observations: input.observations.slice(-4) }, identifier);
+      const { historyPoints, historyYears, ...economicResult } = metric;
+      const { historyPoints: windowPoints, historyYears: windowYears, ...windowResult } = currentWindow;
+
+      expect(historyPoints).toBe(count - 3);
+      expect(historyYears).toBe((count - 3) / 4);
+      expect(windowPoints).toBe(1);
+      expect(windowYears).toBe(0.25);
+      expect(economicResult).toEqual(windowResult);
+    }
+  });
+
+  it("counts all 143 endpoints in each registered slot of the saved 146-survey official evidence", () => {
+    const evidence = JSON.parse(readFileSync(new URL("./fixtures/sloos-202607-standards.json", import.meta.url), "utf8")) as {
+      sourceUrl: string;
+      sourceSha256: string;
+      identifiers: string[];
+      rows: Array<[string, number, number]>;
+    };
+    expect(evidence.sourceUrl).toBe("https://www.federalreserve.gov/data/sloos/sloos-202607-chart-data.htm");
+    expect(evidence.sourceSha256).toBe("462bf0d6960e574bec11bb606b4c0e8fe4ffa4025fcf4e8cb0863b914a8c51b0");
+    expect(evidence.identifiers).toEqual([identifiers.sloosLargeMedium, identifiers.sloosSmall]);
+    expect(evidence.rows).toHaveLength(146);
+    expect(evidence.rows[0][0]).toBe("1990-04-01");
+    expect(evidence.rows.at(-1)![0]).toBe("2026-07-01");
+
+    evidence.identifiers.forEach((identifier, index) => {
+      const input = series(sloosSource, identifier, evidence.rows.map((row) => row[index + 1] as number),
+        evidence.rows.map(([date]) => date), "percent net", "Not seasonally adjusted");
+      expect(transformCreditStandards(input, identifier)).toMatchObject({ historyPoints: 143, historyYears: 35.75 });
+    });
+  });
+
+  it.each([0, 1, 2, 3])("preserves fail-closed SLOOS behavior with only %i surveys", (count) => {
+    const input = series(sloosSource, identifiers.sloosLargeMedium, Array(count).fill(10),
+      quarterlyDates(count), "percent net", "Not seasonally adjusted");
+    expect(transformCreditStandards(input, input.identifier)).toMatchObject({
+      value: null, score: null, historyPoints: 0, historyYears: null,
+    });
+  });
+
+  it.each([
+    ["duplicate quarter", (input: CoreObservationSeriesResult) => { input.observations[1].observedAt = input.observations[0].observedAt; }],
+    ["missing quarter", (input: CoreObservationSeriesResult) => { input.observations.splice(1, 1); }],
+    ["nonconsecutive quarter", (input: CoreObservationSeriesResult) => { input.observations[0].observedAt = "2016-04-01"; }],
+    ["wrong series", (input: CoreObservationSeriesResult) => { input.identifier = identifiers.sloosSmall; }],
+    ["mixed observation series", (input: CoreObservationSeriesResult) => { input.observations[0].identifier = identifiers.sloosSmall; }],
+    ["wrong source", (input: CoreObservationSeriesResult) => { input.observations[0].sourceId = "unapproved-source"; }],
+    ["invalid value", (input: CoreObservationSeriesResult) => { input.observations[0].value = Number.NaN; }],
+    ["nonfinite value", (input: CoreObservationSeriesResult) => { input.observations[0].value = Number.POSITIVE_INFINITY; }],
+    ["out-of-range value", (input: CoreObservationSeriesResult) => { input.observations[0].value = 101; }],
+    ["invalid date", (input: CoreObservationSeriesResult) => { input.observations[0].observedAt = "2016-07-32"; }],
+    ["non-quarter date", (input: CoreObservationSeriesResult) => { input.observations[0].observedAt = "2016-08-01"; }],
+    ["wrong unit", (input: CoreObservationSeriesResult) => { input.observations[0].unit = "percent"; }],
+    ["wrong seasonal basis", (input: CoreObservationSeriesResult) => { input.observations[0].seasonalBasis = "SA"; }],
+    ["unverified history", (input: CoreObservationSeriesResult) => { input.historyStatus = "UNVERIFIED"; }],
+    ["unverified parser", (input: CoreObservationSeriesResult) => { input.parserStatus = "PARTIAL"; }],
+  ] as const)("does not count SLOOS endpoints from a %s", (_, invalidate) => {
+    const input = series(sloosSource, identifiers.sloosLargeMedium, Array(8).fill(10),
+      quarterlyDates(8), "percent net", "Not seasonally adjusted");
+    invalidate(input);
+    expect(transformCreditStandards(input, identifiers.sloosLargeMedium)).toMatchObject({
+      value: null, score: null, historyPoints: 0, historyYears: null,
+    });
   });
 
   it("annualizes the change between four-week H.8 means 13 weeks apart", () => {

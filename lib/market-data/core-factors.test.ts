@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { evaluateRegime } from "@/lib/regime";
 import type { CoreObservationSeriesResult, CoreSourceObservation } from "./types";
@@ -101,6 +102,103 @@ function sourceFixture(): CoreObservationSeriesResult[] {
   ];
   return series;
 }
+
+function sloosFixture(count = 146): CoreObservationSeriesResult[] {
+  const evidence = JSON.parse(readFileSync(new URL("./fixtures/sloos-202607-standards.json", import.meta.url), "utf8")) as {
+    identifiers: string[];
+    rows: Array<[string, number, number]>;
+  };
+  const rows = evidence.rows.slice(-count);
+  return evidence.identifiers.map((identifier, index) => makeSeries("federal-reserve-sloos", identifier,
+    rows.map((row) => row[index + 1] as number), rows.map(([date]) => date), "percent net", "Not seasonally adjusted"));
+}
+
+describe("SLOOS transformed reference quality", () => {
+  it.each([4, 5, 23, 43, 146])("uses the frozen 40-quarter target for %i valid surveys", (count) => {
+    const result = buildCoreFactors(sloosFixture(count), asOf);
+    const standards = result.factors.creditConditions.families.find(({ key }) => key === "standards")!;
+    expect(standards).toMatchObject({ coverage: 1, eligible: true, weight: 0.4 });
+    for (const slot of standards.slots) {
+      expect(slot).toMatchObject({ eligible: true, historyPoints: count - 3, historyYears: (count - 3) / 4 });
+      expect(slot.quality.history).toBe(Math.min(1, (count - 3) / 40));
+      expect(slot.quality.release).toBe(0.8);
+    }
+  });
+
+  it.each(["1991-01-01", "1991-04-01", "1995-10-01"])("counts only transformed endpoints through the evaluated %s cutoff", (cutoff) => {
+    const sources = sloosFixture();
+    const expectedCount = sources[0].observations.filter(({ observedAt }) => observedAt <= cutoff).length - 3;
+    const result = buildCoreFactors(sources, `${cutoff}T23:59:59.999Z`, { mode: "current-revised-history" });
+    for (const metric of [result.momentum.creditStandardsLarge, result.momentum.creditStandardsSmall]) {
+      expect(metric.historyPoints).toBe(expectedCount);
+      expect(metric.historyYears).toBe(expectedCount / 4);
+      expect(metric.observations.every(({ observedAt }) => observedAt <= cutoff)).toBe(true);
+    }
+    expect(buildCoreFactors(sources, `${cutoff}T23:59:59.999Z`).factors.creditConditions.coverage).toBe(0);
+  });
+
+  it("propagates only corrected SLOOS reference metadata into the frozen quality formula", () => {
+    const surveys = sloosFixture();
+    const performance = [
+      makeSeries("federal-reserve-credit-performance", "STFBQD%STFBAIL_XEOP_MA.Q", Array(44).fill(2.5), quarterlyDates(44), "percent", "SA"),
+      makeSeries("federal-reserve-credit-performance", "STFBQC%STFBAIL_MA.Q", Array(44).fill(0.7), quarterlyDates(44), "percent", "SA"),
+    ];
+    const anchors = sourceFixture().filter(({ sourceId }) => sourceId !== "treasury-real-yield").map((source) => {
+      if (source.identifier === "LNS14000000") return {
+        ...source,
+        observations: source.observations.filter(({ observedAt }) => observedAt !== "2025-10-01"),
+        missingPeriods: ["2025-10-01"],
+        historyStatus: "PARTIAL" as const,
+      };
+      if (source.sourceId === "dol-initial-claims") return { ...source, observations: source.observations.slice(-54), historyStatus: "PARTIAL" as const };
+      return source;
+    });
+    const financing = makeSeries("treasury-real-yield", "TC_10YEAR", Array(2520).fill(1.5),
+      businessDayDates(2520, "2026-10-02"), "percent", "Not seasonally adjusted");
+    const m2 = makeSeries("federal-reserve-h6-m2", "M2.M", Array(140).fill(20000), monthlyDates(140), "billions USD", "SA");
+    const sources = [...anchors, financing, m2, ...surveys, ...performance];
+    const sourceCopy = structuredClone(sources);
+    const result = buildCoreFactors(sources, asOf);
+    const recentOnly = buildCoreFactors([...anchors, financing, m2, ...sloosFixture(4), ...performance], asOf);
+    const credit = result.factors.creditConditions;
+    const standards = credit.families.find(({ key }) => key === "standards")!;
+    expect(credit).toMatchObject({ coverage: 0.7, eligibleFamilies: 2, status: "LIMITED", historyYears: 11 });
+    expect(Object.values(result.factors).map(({ coverage }) => coverage)).toEqual([1, 0.875, 0.65, 1, 0.7, 0.5]);
+    expect(standards.slots.map(({ historyPoints, historyYears, quality }) => [historyPoints, historyYears, quality.history]))
+      .toEqual([[143, 35.75, 1], [143, 35.75, 1]]);
+    for (const key of ["inflation", "growth", "labor", "policyRates", "liquidityProxy"] as const) {
+      expect(result.factors[key]).toEqual(recentOnly.factors[key]);
+    }
+    expect(result.native).toEqual(recentOnly.native);
+    expect(credit.score).toBe(recentOnly.factors.creditConditions.score);
+    expect(credit.bounds).toEqual(recentOnly.factors.creditConditions.bounds);
+    for (const key of ["creditStandardsLarge", "creditStandardsSmall"] as const) {
+      const { historyPoints, historyYears, ...metric } = result.momentum[key];
+      const { historyPoints: recentPoints, historyYears: recentYears, ...recent } = recentOnly.momentum[key];
+      expect(metric).toEqual(recent);
+      expect([historyPoints, historyYears, recentPoints, recentYears]).toEqual([143, 35.75, 1, 0.25]);
+    }
+
+    const afterInputs = createRegimeInputsFromCoreFactors(result);
+    // Reconstruct only the accepted pre-fix bookkeeping, not another transform.
+    const beforeInputs = structuredClone(afterInputs);
+    beforeInputs.factors.creditConditions.historyYears = 1;
+    const offsets = Object.values(result.factors).flatMap((factor) => factor.families.flatMap((family) =>
+      family.slots.map(() => factor.key === "creditConditions" && family.key === "standards")));
+    beforeInputs.qualitySlots.forEach((slot, index) => { if (offsets[index]) slot.history = 4 / 40; });
+    const unroundedQuality = (inputs: typeof afterInputs) => 100 * inputs.qualitySlots.reduce((sum, slot) =>
+      sum + slot.weight * Number(slot.eligible) * slot.fetchHealth *
+      (0.4 + 0.2 * slot.freshness + 0.2 * slot.history + 0.2 * slot.release), 0);
+    expect(unroundedQuality(afterInputs) - unroundedQuality(beforeInputs)).toBeCloseTo(1.2, 10);
+    const before = evaluateRegime(beforeInputs);
+    const after = evaluateRegime(afterInputs);
+    expect([before.dataQuality, after.dataQuality]).toEqual([72, 73]);
+    expect(after.dataQuality).toBe(Math.round(unroundedQuality(afterInputs)));
+    expect(before.dataQuality).toBe(Math.round(unroundedQuality(beforeInputs)));
+    expect({ ...after, dataQuality: before.dataQuality }).toEqual(before);
+    expect(sources).toEqual(sourceCopy);
+  });
+});
 
 describe("approved anchor family aggregation", () => {
   it("uses CPI and PCE core/headline slots at fixed weights; SA momentum is not a level vote", () => {

@@ -125,8 +125,8 @@ describe("getDashboardPayload", () => {
     },
     {
       failed: true,
-      priorDigest: "f84ea10f35793c5b3762d6c1d721aa111fce01f13ba007f74d2a781ebdd760d7",
-      digest: "d45b810265195430af868268aa157297e8701c05a864c6b102e009f59b110d42",
+      priorDigest: "2dc8ddd24e473b5268a6ba5d8adaf320713ea06e155cbaae28e75ce1957be502",
+      digest: "6e8fab89daf4aab9405b5b025fae4591cb87cce726e7f672dd47d78966a7119d",
     },
   ])("preserves the full dashboard and brief snapshot after release-grade correction (DOL failed=$failed)", async ({ failed, priorDigest, digest }) => {
     const fetchImpl = fixtureFetch((url) => failed && url.hostname === "oui.doleta.gov");
@@ -181,7 +181,9 @@ describe("getDashboardPayload", () => {
     expect(payload.observations).toEqual(priorReleaseGrades.observations);
     expect(payload.scores).toEqual(priorReleaseGrades.scores);
     expect(payload.regime).toEqual(priorReleaseGrades.regime);
-    expect([priorReleaseGrades.regime.dataQuality, payload.regime.dataQuality]).toEqual(failed ? [58, 58] : [61, 61]);
+    // Six surveys provide three transformed endpoints; the small history
+    // correction crosses a rounding boundary only in the failed-DOL fixture.
+    expect([priorReleaseGrades.regime.dataQuality, payload.regime.dataQuality]).toEqual(failed ? [57, 57] : [61, 61]);
     expect(payload.sourceRegistry.find((entry) => entry.id === "dol-initial-claims")?.releaseDateQuality).toBe(0.8);
     const snapshot = createDashboardSnapshot(payload);
     const priorSnapshot = createDashboardSnapshot({
@@ -210,6 +212,15 @@ describe("getDashboardPayload", () => {
     expect(payload.regime.assessmentStatus).toBe(failed ? "INSUFFICIENT_DATA" : "PROVISIONAL");
     // Includes the complete public payload and brief after correcting date-only release grades.
     expect(createHash("sha256").update(JSON.stringify(snapshot)).digest("hex")).toBe(digest);
+    if (failed) {
+      // Restoring only the old rounded DQ reproduces both accepted pre-fix
+      // snapshots, including the deterministic brief, byte for byte.
+      const legacyDigest = (value: typeof snapshot) => createHash("sha256").update(JSON.stringify(createDashboardSnapshot({
+        ...value.payload, regime: { ...value.payload.regime, dataQuality: 58 },
+      }))).digest("hex");
+      expect(legacyDigest(priorSnapshot)).toBe("f84ea10f35793c5b3762d6c1d721aa111fce01f13ba007f74d2a781ebdd760d7");
+      expect(legacyDigest(snapshot)).toBe("d45b810265195430af868268aa157297e8701c05a864c6b102e009f59b110d42");
+    }
   });
 
   it("normalizes all public sources with generated and provider fetch timestamps", async () => {
