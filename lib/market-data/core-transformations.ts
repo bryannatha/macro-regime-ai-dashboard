@@ -324,7 +324,8 @@ export function transformCreditStandards(
   const latestScore = interpolateStress(latest, CORE_SCORE_ANCHORS.creditStandards);
   const meanScore = interpolateStress(mean4, CORE_SCORE_ANCHORS.creditStandards);
   if (latestScore === null || meanScore === null) return unavailable("SLOOS values could not be interpolated against the approved anchors.", "percent net");
-  const metric = result(latest, CORE_SCORE_ANCHORS.creditStandards, "percent net", observations.slice(-4), 4, 1);
+  const historyPoints = points.length - 3;
+  const metric = result(latest, CORE_SCORE_ANCHORS.creditStandards, "percent net", observations.slice(-4), historyPoints, historyPoints / 4);
   return { ...metric, score: 0.6 * latestScore + 0.4 * meanScore };
 }
 
