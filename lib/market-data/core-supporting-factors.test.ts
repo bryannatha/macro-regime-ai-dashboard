@@ -656,6 +656,102 @@ describe("approved supporting transforms", () => {
   });
 });
 
+describe("real-M2 transformed reference history", () => {
+  function inputs(count: number) {
+    const periods = monthlyDates(count, 2010);
+    return [
+      series(monthlySource, "M2.M", Array(count).fill(20_000), periods, "billions USD", "SA"),
+      series(pceSource, "T20804-M / DPCERG", Array(count).fill(100), periods, "index (2017=100)", "SA"),
+    ] as const;
+  }
+
+  it.each([[6, 1], [7, 2], [65, 60], [125, 120]])("counts %i matched months as %i transformed endpoints", (count, expected) => {
+    const [m2, pce] = inputs(count);
+    const original = structuredClone([m2, pce]);
+    const metric = transformRealM2(m2, pce);
+    expect(metric).toMatchObject({ value: 0, score: 55, historyPoints: expected, historyYears: expected / 12 });
+    expect(metric.observations).toEqual(m2.observations.slice(-6).flatMap((item, index) => [item, pce.observations.slice(-6)[index]]));
+    expect(metric.observations.every(({ releasedAt, vintage }) => releasedAt === null && vintage === null)).toBe(true);
+    expect([m2, pce]).toEqual(original);
+  });
+
+  it("counts all 807 endpoints in the accepted official 812-month extract without changing the current calculation", () => {
+    const evidence = JSON.parse(readFileSync(new URL("./fixtures/real-m2-202608-matched.json", import.meta.url), "utf8")) as {
+      sources: Array<{ sourceId: string; identifier: string; unit: string; seasonalBasis: string }>;
+      rows: Array<[string, number, number]>;
+    };
+    expect(evidence.rows).toHaveLength(812);
+    expect(evidence.rows[0]).toEqual(["1959-01-01", 286.6, 15.164]);
+    expect(evidence.rows.at(-1)).toEqual(["2026-08-01", 23_342.8, 131.579]);
+    const [m2, pce] = evidence.sources.map((source, index) => series(source.sourceId, source.identifier,
+      evidence.rows.map((row) => row[index + 1] as number), evidence.rows.map(([date]) => date), source.unit, source.seasonalBasis));
+    const metric = transformRealM2(m2, pce);
+    expect(metric).toMatchObject({ historyPoints: 807, historyYears: 67.25 });
+    const { historyPoints, historyYears, ...economic } = metric;
+    const { historyPoints: shortPoints, historyYears: shortYears, ...short } = transformRealM2(
+      { ...m2, observations: m2.observations.slice(-6) }, { ...pce, observations: pce.observations.slice(-6) });
+    expect(economic).toEqual(short);
+    expect([historyPoints, historyYears, shortPoints, shortYears]).toEqual([807, 67.25, 1, 1 / 12]);
+  });
+
+  it.each([0, 1, 2, 3, 4, 5])("preserves fail-closed behavior with %i matched months", (count) => {
+    expect(transformRealM2(...inputs(count))).toMatchObject({ value: null, score: null, historyPoints: 0, historyYears: null });
+  });
+
+  it("counts only exact common months, not unmatched source prefixes or suffixes", () => {
+    const [m2, pce] = inputs(8);
+    pce.observations = pce.observations.map((item, index) => ({ ...item, observedAt: monthlyDates(8, 2010, 2)[index] }));
+    expect(transformRealM2(m2, pce)).toMatchObject({ historyPoints: 2, historyYears: 2 / 12, observedAt: "2010-08-01" });
+    expect(transformRealM2(m2, { ...pce, observations: pce.observations.slice(2) }).score).toBeNull();
+  });
+
+  it.each([0, 1])("excludes historical windows containing nonpositive input from constituent %i without changing current eligibility", (sourceIndex) => {
+    const sources = inputs(20);
+    sources[sourceIndex].observations[5].value = 0;
+    expect(transformRealM2(...sources)).toMatchObject({ value: 0, score: 55, historyPoints: 9, historyYears: 0.75 });
+    sources[sourceIndex].observations[5].value = -1;
+    expect(transformRealM2(...sources)).toMatchObject({ value: 0, score: 55, historyPoints: 9 });
+    sources[sourceIndex].observations.at(-1)!.value = 0;
+    expect(transformRealM2(...sources)).toMatchObject({ value: null, score: null, historyPoints: 0 });
+  });
+
+  it("does not count an overflowing historical ratio as a valid transformed endpoint", () => {
+    const [m2, pce] = inputs(20);
+    m2.observations[5].value = Number.MAX_VALUE;
+    pce.observations[5].value = Number.MIN_VALUE;
+    expect(transformRealM2(m2, pce)).toMatchObject({ value: 0, score: 55, historyPoints: 9 });
+  });
+
+  it("does not count nonfinite historical means even when every constituent ratio is finite", () => {
+    const [m2, pce] = inputs(20);
+    for (let index = 0; index < 3; index += 1) {
+      m2.observations[index].value = Number.MAX_VALUE * 0.75;
+      pce.observations[index].value = 1;
+    }
+    // The first two prior-window sums overflow; later current economics do not.
+    expect(transformRealM2(m2, pce)).toMatchObject({ value: 0, score: 55, historyPoints: 13, historyYears: 13 / 12 });
+  });
+
+  it.each([
+    ["missing month", (input: CoreObservationSeriesResult) => { input.observations.splice(1, 1); }],
+    ["duplicate month", (input: CoreObservationSeriesResult) => { input.observations[1].observedAt = input.observations[0].observedAt; }],
+    ["out-of-order months", (input: CoreObservationSeriesResult) => { [input.observations[0], input.observations[1]] = [input.observations[1], input.observations[0]]; }],
+    ["nonconsecutive month", (input: CoreObservationSeriesResult) => { input.observations[0].observedAt = "2009-11-01"; }],
+    ["non-month-start date", (input: CoreObservationSeriesResult) => { input.observations[0].observedAt = "2010-01-15"; }],
+    ["wrong series", (input: CoreObservationSeriesResult) => { input.identifier = "M2.WM"; }],
+    ["wrong observation series", (input: CoreObservationSeriesResult) => { input.observations[0].identifier = "M2.WM"; }],
+    ["wrong units", (input: CoreObservationSeriesResult) => { input.observations[0].unit = "millions USD"; }],
+    ["wrong seasonal basis", (input: CoreObservationSeriesResult) => { input.observations[0].seasonalBasis = "NSA"; }],
+    ["nonfinite input", (input: CoreObservationSeriesResult) => { input.observations[0].value = Infinity; }],
+    ["NaN input", (input: CoreObservationSeriesResult) => { input.observations[0].value = NaN; }],
+    ["unverified history", (input: CoreObservationSeriesResult) => { input.historyStatus = "UNVERIFIED"; }],
+  ] as const)("retains whole-source validation for a %s", (_, invalidate) => {
+    const [m2, pce] = inputs(20);
+    invalidate(m2);
+    expect(transformRealM2(m2, pce)).toMatchObject({ value: null, score: null, historyPoints: 0, historyYears: null });
+  });
+});
+
 describe("supporting factor assembly", () => {
   function supportingSources(includeH8: boolean): CoreObservationSeriesResult[] {
     const surveyDates = ["2025-07-01", "2025-10-01", "2026-01-01", "2026-04-01"];

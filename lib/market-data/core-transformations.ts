@@ -407,5 +407,16 @@ export function transformRealM2(
   if (priorMean <= 0) return unavailable("The matched real-M2 comparison period was not positive.", "percent annualized");
   const value = 100 * ((currentMean / priorMean) ** 4 - 1);
   const sourceObservations = lastSix.flatMap(({ m2Observation, pceObservation }) => [m2Observation, pceObservation]);
-  return result(value, CORE_SCORE_ANCHORS.realM2, "percent annualized", sourceObservations, 6, 0.5);
+  const historyPoints = matched.reduce((count, _, index) => {
+    if (index < 5) return count;
+    const window = matched.slice(index - 5, index + 1);
+    if (window.some(({ m2Observation, pceObservation, ratio }, offset) =>
+      m2Observation.value <= 0 || pceObservation.value <= 0 || !Number.isFinite(ratio) ||
+      (offset > 0 && monthSerial(m2Observation.observedAt) !== monthSerial(window[offset - 1].m2Observation.observedAt) + 1))) return count;
+    const prior = window.slice(0, 3).reduce((sum, item) => sum + item.ratio, 0) / 3;
+    const current = window.slice(3).reduce((sum, item) => sum + item.ratio, 0) / 3;
+    return count + Number(prior > 0 && Number.isFinite(prior) && Number.isFinite(current) &&
+      Number.isFinite(100 * ((current / prior) ** 4 - 1)));
+  }, 0);
+  return result(value, CORE_SCORE_ANCHORS.realM2, "percent annualized", sourceObservations, historyPoints, historyPoints / 12);
 }

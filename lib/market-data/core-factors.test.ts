@@ -192,11 +192,108 @@ describe("SLOOS transformed reference quality", () => {
     expect(unroundedQuality(afterInputs) - unroundedQuality(beforeInputs)).toBeCloseTo(1.2, 10);
     const before = evaluateRegime(beforeInputs);
     const after = evaluateRegime(afterInputs);
-    expect([before.dataQuality, after.dataQuality]).toEqual([72, 73]);
+    expect([before.dataQuality, after.dataQuality]).toEqual([74, 75]);
     expect(after.dataQuality).toBe(Math.round(unroundedQuality(afterInputs)));
     expect(before.dataQuality).toBe(Math.round(unroundedQuality(beforeInputs)));
     expect({ ...after, dataQuality: before.dataQuality }).toEqual(before);
     expect(sources).toEqual(sourceCopy);
+  });
+});
+
+function realM2Fixture(count = 812): CoreObservationSeriesResult[] {
+  const evidence = JSON.parse(readFileSync(new URL("./fixtures/real-m2-202608-matched.json", import.meta.url), "utf8")) as {
+    sources: Array<{ sourceId: string; identifier: string; unit: string; seasonalBasis: string }>;
+    rows: Array<[string, number, number]>;
+  };
+  const rows = evidence.rows.slice(-count);
+  return evidence.sources.map((source, index) => ({
+    ...makeSeries(source.sourceId, source.identifier, rows.map((row) => row[index + 1] as number),
+      rows.map(([date]) => date), source.unit, source.seasonalBasis),
+    observations: rows.map((row) => ({
+      sourceId: source.sourceId, identifier: source.identifier, value: row[index + 1] as number,
+      unit: source.unit, seasonalBasis: source.seasonalBasis, observedAt: row[0],
+      releasedAt: null, retrievedAt, firstSeenAt: null, releaseDateQuality: 0, version: null, vintage: null,
+    })),
+  }));
+}
+
+describe("real-M2 transformed reference quality", () => {
+  it.each([[6, 1], [7, 2], [65, 60], [125, 120], [812, 807]])("uses the frozen monthly target for %i inputs / %i endpoints", (count, endpoints) => {
+    const result = buildCoreFactors(realM2Fixture(count), asOf);
+    const liquidity = result.factors.liquidityProxy;
+    expect(liquidity).toMatchObject({ coverage: 0.5, eligibleFamilies: 1, status: "WITHHELD" });
+    const family = liquidity.families.find(({ key }) => key === "realM2")!;
+    expect(family).toMatchObject({ eligible: true, weight: 0.5, coverage: 1 });
+    expect(family.slots[0]).toMatchObject({
+      eligible: true, historyPoints: endpoints, historyYears: endpoints / 12, releaseQuality: 0,
+      quality: { history: Math.min(1, endpoints / 120), release: 0 },
+    });
+  });
+
+  it.each([["1959-05-01", 0], ["1959-06-01", 1], ["1959-07-01", 2], ["1964-05-01", 60]] as const)("respects the evaluated %s cutoff without backdating vintages", (cutoff, endpoints) => {
+    const sources = realM2Fixture();
+    const original = structuredClone(sources);
+    const result = buildCoreFactors(sources, `${cutoff}T23:59:59.999Z`, { mode: "current-revised-history" });
+    expect(result.momentum.realM2.historyPoints).toBe(endpoints);
+    expect(result.momentum.realM2.historyYears).toBe(endpoints ? endpoints / 12 : null);
+    expect(result.momentum.realM2.observations.every((item) => item.observedAt <= cutoff &&
+      item.retrievedAt === retrievedAt && item.releasedAt === null && item.vintage === null)).toBe(true);
+    expect(buildCoreFactors(sources, `${cutoff}T23:59:59.999Z`).factors.liquidityProxy.coverage).toBe(0);
+    expect(sources).toEqual(original);
+  });
+
+  it("propagates only real-M2 reference metadata through the unchanged quality formula", () => {
+    const money = realM2Fixture();
+    const anchors = sourceFixture().filter(({ identifier }) => !["T20804-M / DPCERG", "TC_10YEAR"].includes(identifier)).map((source) => {
+      if (source.identifier === "LNS14000000") return {
+        ...source, observations: source.observations.filter(({ observedAt }) => observedAt !== "2025-10-01"),
+        missingPeriods: ["2025-10-01"], historyStatus: "PARTIAL" as const,
+      };
+      if (source.sourceId === "dol-initial-claims") return { ...source, observations: source.observations.slice(-54), historyStatus: "PARTIAL" as const };
+      return source;
+    });
+    const financing = makeSeries("treasury-real-yield", "TC_10YEAR", Array(2520).fill(1.5),
+      businessDayDates(2520, "2026-10-02"), "percent", "Not seasonally adjusted");
+    const performance = [
+      makeSeries("federal-reserve-credit-performance", "STFBQD%STFBAIL_XEOP_MA.Q", Array(44).fill(2.5), quarterlyDates(44), "percent", "SA"),
+      makeSeries("federal-reserve-credit-performance", "STFBQC%STFBAIL_MA.Q", Array(44).fill(0.7), quarterlyDates(44), "percent", "SA"),
+    ];
+    const sources = [...anchors, financing, ...money, ...sloosFixture(), ...performance];
+    const original = structuredClone(sources);
+    const result = buildCoreFactors(sources, asOf);
+    const { historyPoints, historyYears, ...economic } = result.momentum.realM2;
+    expect([historyPoints, historyYears]).toEqual([807, 67.25]);
+    const recentOnly = buildCoreFactors([...sources.filter(({ sourceId }) => sourceId !== "federal-reserve-h6-m2"),
+      { ...money[0], observations: money[0].observations.slice(-6) }], asOf);
+    const { historyPoints: recentPoints, historyYears: recentYears, ...recent } = recentOnly.momentum.realM2;
+    expect(economic).toEqual(recent);
+    expect([recentPoints, recentYears]).toEqual([1, 1 / 12]);
+    for (const key of ["inflation", "growth", "labor", "policyRates", "creditConditions"] as const) {
+      expect(result.factors[key]).toEqual(recentOnly.factors[key]);
+    }
+    expect(result.native).toEqual(recentOnly.native);
+    expect(result.factors.creditConditions).toMatchObject({ coverage: 0.7, status: "LIMITED" });
+    expect(result.factors.liquidityProxy).toMatchObject({ coverage: 0.5, status: "WITHHELD", historyYears: 67.25 });
+    const slot = result.factors.liquidityProxy.families.find(({ key }) => key === "realM2")!.slots[0];
+    expect(slot).toMatchObject({ eligible: true, historyPoints: 807, historyYears: 67.25, quality: { history: 1, release: 0 } });
+
+    const afterInputs = createRegimeInputsFromCoreFactors(result);
+    const beforeInputs = structuredClone(afterInputs);
+    beforeInputs.factors.liquidityProxy.historyYears = 0.5;
+    const offsets = Object.values(result.factors).flatMap((factor) => factor.families.flatMap((family) =>
+      family.slots.map(() => factor.key === "liquidityProxy" && family.key === "realM2")));
+    beforeInputs.qualitySlots.forEach((item, index) => { if (offsets[index]) item.history = 6 / 120; });
+    const unroundedQuality = (inputs: typeof afterInputs) => 100 * inputs.qualitySlots.reduce((sum, item) =>
+      sum + item.weight * Number(item.eligible) * item.fetchHealth *
+      (0.4 + 0.2 * item.freshness + 0.2 * item.history + 0.2 * item.release), 0);
+    expect(unroundedQuality(afterInputs) - unroundedQuality(beforeInputs)).toBeCloseTo(1.5833333333333333, 10);
+    const before = evaluateRegime(beforeInputs);
+    const after = evaluateRegime(afterInputs);
+    expect([before.dataQuality, after.dataQuality]).toEqual([72, 73]);
+    expect(before.dataQuality).toBe(Math.round(unroundedQuality(beforeInputs)));
+    expect(after.dataQuality).toBe(Math.round(unroundedQuality(afterInputs)));
+    expect({ ...after, dataQuality: before.dataQuality }).toEqual(before);
+    expect(sources).toEqual(original);
   });
 });
 
